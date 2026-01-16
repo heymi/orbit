@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orbit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              background: 'rgb(var(--background) / <alpha-value>)',
+              surface: 'rgb(var(--surface) / <alpha-value>)',
+              'surface-glass': 'rgb(var(--surface-glass) / <alpha-value>)',
+              border: 'rgb(var(--border) / <alpha-value>)',
+              main: 'rgb(var(--text-main) / <alpha-value>)',
+              muted: 'rgb(var(--text-muted) / <alpha-value>)',
+              accent: 'rgb(var(--accent) / <alpha-value>)',
+            },
+            boxShadow: {
+              'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.08)',
+              'floating': '0 20px 40px -12px rgba(0, 0, 0, 0.12), 0 0 1px 0 rgba(0,0,0,0.1)',
+            },
+            animation: {
+              'scale-in': 'scaleIn 0.2s ease-out forwards',
+              'fade-in': 'fadeIn 0.3s ease-out forwards',
+            },
+            keyframes: {
+              scaleIn: {
+                '0%': { transform: 'scale(0.95)', opacity: '0' },
+                '100%': { transform: 'scale(1)', opacity: '1' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        /* Apple-esque Light Mode */
+        --background: 245 245 247;      /* Very light grey, almost white */
+        --surface: 255 255 255;         /* Pure white cards */
+        --surface-glass: 255 255 255;   /* Glass base */
+        --border: 229 229 234;          /* Subtle borders */
+        --text-main: 28 28 30;          /* Soft black */
+        --text-muted: 142 142 147;      /* San Francisco Grey */
+        --accent: 0 122 255;            /* Apple Blue */
+      }
+
+      .dark {
+        /* Deep, rich Dark Mode */
+        --background: 0 0 0;            /* Pure black background */
+        --surface: 28 28 30;            /* Dark grey cards */
+        --surface-glass: 30 30 32;      
+        --border: 58 58 60;             
+        --text-main: 255 255 255;
+        --text-muted: 152 152 157;
+        --accent: 10 132 255;           /* iOS Dark Mode Blue */
+      }
+
+      body {
+        background-color: rgb(var(--background));
+        color: rgb(var(--text-main));
+        font-family: 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), color 0.4s;
+      }
+
+      /* Glassmorphism Utilities */
+      .glass-panel {
+        background: rgba(var(--surface-glass), 0.65);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(var(--border), 0.5);
+      }
+      
+      .dark .glass-panel {
+        background: rgba(30, 30, 30, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      /* Smooth selection */
+      ::selection {
+        background: rgba(var(--accent), 0.2);
+        color: rgb(var(--text-main));
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react-markdown": "https://esm.sh/react-markdown@9.0.1"
+  }
+}
+</script>
+<script>
+  (function() {
+    const savedTheme = localStorage.getItem('theme');
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (savedTheme === 'dark' || (!savedTheme && systemDark)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  })();
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

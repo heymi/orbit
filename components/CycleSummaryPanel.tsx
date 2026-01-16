@@ -1,6 +1,7 @@
 import React from 'react';
 import { CalendarRange, Target } from 'lucide-react';
 import { Cycle, Issue, Status } from '../types';
+import { formatBeijingDate } from '../constants';
 import { buildBurndownSeries } from '../services/burndown';
 
 interface CycleSummaryPanelProps {
@@ -50,7 +51,7 @@ const CycleSummaryPanel: React.FC<CycleSummaryPanelProps> = ({ cycle, issues }) 
           <div className="flex items-center justify-end gap-2">
             <CalendarRange size={14} />
             <span>
-              {cycle.startDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} - {cycle.endDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+              {formatBeijingDate(cycle.startDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')} - {formatBeijingDate(cycle.endDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')}
             </span>
           </div>
           <div className="mt-2 text-sm text-main font-medium">{doneCount}/{totalCount} 完成</div>

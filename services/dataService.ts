@@ -3,6 +3,7 @@ import { supabaseAdmin } from './supabaseAdmin';
 import { Issue, User, Team, Cycle, Project, Activity, Subtask, Status, Priority, UserRole, PermissionRole, InviteResult, ThemePreference, LayoutPreference } from '../types';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { diffSubtasks } from './subtaskDiff';
+import { getBeijingNow } from '../constants';
 
 // ============ 组织类型 ============
 export interface Organization {
@@ -642,7 +643,7 @@ export const createIssue = async (
   userId: string
 ): Promise<Issue> => {
   if (!currentOrgId) throw new Error('No organization selected');
-  const now = new Date().toISOString();
+  const now = getBeijingNow().toISOString();
 
   const { data: issueData, error: issueError } = await supabase.from('issues').insert({
     org_id: currentOrgId,
@@ -686,7 +687,7 @@ export const createIssue = async (
 };
 
 export const updateIssue = async (issue: Issue): Promise<Issue> => {
-  const now = new Date().toISOString();
+  const now = getBeijingNow().toISOString();
 
   const { data, error } = await supabase.from('issues').update({
     title: issue.title,
@@ -754,7 +755,7 @@ export const updateIssue = async (issue: Issue): Promise<Issue> => {
 };
 
 export const updateIssueIdentifier = async (issueId: string, identifier: string): Promise<void> => {
-  const now = new Date().toISOString();
+  const now = getBeijingNow().toISOString();
   const { error } = await supabase
     .from('issues')
     .update({ identifier, updated_at: now })

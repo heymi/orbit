@@ -8,7 +8,10 @@ export interface BurndownPoint {
 
 const msPerDay = 24 * 60 * 60 * 1000;
 
-const startOfDay = (date: Date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+const startOfDay = (date: Date) => {
+  const beijingDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  return new Date(Date.UTC(beijingDate.getUTCFullYear(), beijingDate.getUTCMonth(), beijingDate.getUTCDate()));
+};
 
 export const buildBurndownSeries = (cycle: Cycle, issues: Issue[]): BurndownPoint[] => {
   const start = startOfDay(cycle.startDate);

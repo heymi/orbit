@@ -28,6 +28,7 @@ import { buildIdentifier } from './services/identifier';
 import { isBugIssue } from './services/bugHelpers';
 import { buildBugStats } from './services/bugStats';
 import { getDefaultsForView } from './services/viewDefaults';
+import { formatBeijingDate, formatBeijingDateTime, formatBeijingTime, getBeijingNow } from './constants';
 
 const DEFAULT_VIEW_STATE: ViewState = { type: 'my' };
 const DEFAULT_PIPELINE_STAGE: NonNullable<ViewState['pipelineStage']> = 'building';
@@ -184,7 +185,7 @@ const IssueCard: React.FC<{
               {isDeployed && <Rocket size={10} className="text-green-500" />}
               {isRejected && <XCircle size={10} className="text-red-500" />}
             </span>
-            <span className="text-[10px] text-muted">{new Date(issue.createdAt).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric'})}</span>
+            <span className="text-[10px] text-muted">{formatBeijingDate(issue.createdAt, { month: 'numeric', day: 'numeric' })}</span>
          </div>
 
          <h3 className={`text-sm font-medium leading-snug mb-1.5 transition-colors line-clamp-2 
@@ -312,7 +313,7 @@ const IssueRow: React.FC<{
           ))}
        </div>
        <div className="hidden md:block shrink-0 text-xs text-muted w-16 text-right">
-          {new Date(issue.createdAt).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric'})}
+          {formatBeijingDate(issue.createdAt, { month: 'numeric', day: 'numeric' })}
        </div>
        <div className="shrink-0 w-28 flex justify-end">
           {assignee ? (
@@ -404,12 +405,13 @@ const BusinessDashboardHeader: React.FC<{ issues: Issue[], inboxTeamId: string, 
     );
 };
 
-const EngineeringDashboardHeader: React.FC<{ issues: Issue[], cycles: Cycle[], engTeamId: string }> = ({ issues, cycles, engTeamId }) => {
+  const EngineeringDashboardHeader: React.FC<{ issues: Issue[], cycles: Cycle[], engTeamId: string }> = ({ issues, cycles, engTeamId }) => {
     // Current Cycle Stats
     const currentCycle = cycles.find(c => {
-        const now = new Date();
-        return now >= c.startDate && now <= c.endDate;
+        const nowInBeijing = getBeijingNow();
+        return nowInBeijing >= c.startDate && nowInBeijing <= c.endDate;
     }) || cycles[0];
+
 
     const cycleIssues = currentCycle ? issues.filter(i => i.cycleId === currentCycle.id) : [];
     const totalCycle = cycleIssues.length;
@@ -793,8 +795,8 @@ function App() {
 
   // Cycle Logic
   const currentCycle = useMemo(() => {
-    const now = new Date();
-    return cycles.find(c => now >= c.startDate && now <= c.endDate) || cycles[0];
+    const nowInBeijing = getBeijingNow();
+    return cycles.find(c => nowInBeijing >= c.startDate && nowInBeijing <= c.endDate) || cycles[0];
   }, [cycles]);
 
   // Theme Logic
@@ -912,7 +914,7 @@ function App() {
 
   const recentUpdates = useMemo(() => {
     if (!user) return [];
-    const now = new Date();
+    const now = getBeijingNow();
     const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     return issues
@@ -1419,7 +1421,7 @@ function App() {
                           key={c.id}
                           icon={<Repeat size={18} />}
                           label={c.name}
-                          subLabel={`${c.startDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} - ${c.endDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}`}
+                          subLabel={`${formatBeijingDate(c.startDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')} - ${formatBeijingDate(c.endDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')}`}
                           isActive={viewState.type === 'cycle' && viewState.cycleId === c.id}
                           onClick={() => setViewState({ type: 'cycle', cycleId: c.id })}
                           count={issues.filter(i => i.cycleId === c.id).length}
@@ -1613,8 +1615,8 @@ function App() {
                                           <div className="text-[9px] text-muted truncate mt-0.5">{issue.title}</div>
                                         </div>
                                         <div className="text-[9px] text-muted text-right flex flex-col items-end gap-0.5 leading-4">
-                                          <div>{timestamp.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}</div>
-                                          <div>{timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</div>
+                                          <div>{formatBeijingDate(timestamp, { month: '2-digit', day: '2-digit' }, 'zh-CN')}</div>
+                                          <div>{formatBeijingTime(timestamp, { hour: '2-digit', minute: '2-digit' }, 'zh-CN')}</div>
                                         </div>
                                       </button>
                                     );

@@ -12,6 +12,7 @@ import { enrichTaskDetails } from '../services/geminiService';
 import { resolveAvatarUrl } from '../services/avatar';
 import { canExecuteQaAction, resolveActivityUserId } from '../services/issuePermissions';
 import { canCompleteBug, incrementReopenCount, withCloseReason } from '../services/bugWorkflow';
+import { formatBeijingDateTime, formatBeijingTime, getBeijingNow } from '../constants';
 
 interface IssueDetailPaneProps {
   issue: Issue | null;
@@ -158,13 +159,13 @@ const IssueDetailPane: React.FC<IssueDetailPaneProps> = ({
     
     if (updates.status && updates.status !== localIssue.status) {
         newActivities.push({
-            id: Math.random().toString(), type: 'update', userId: resolveActivityUserId(currentUser?.id), timestamp: new Date(),
+            id: Math.random().toString(), type: 'update', userId: resolveActivityUserId(currentUser?.id), timestamp: getBeijingNow(),
             field: '状态', oldValue: localIssue.status, newValue: updates.status
         });
     }
     if (updates.priority && updates.priority !== localIssue.priority) {
         newActivities.push({
-            id: Math.random().toString(), type: 'update', userId: resolveActivityUserId(currentUser?.id), timestamp: new Date(),
+            id: Math.random().toString(), type: 'update', userId: resolveActivityUserId(currentUser?.id), timestamp: getBeijingNow(),
             field: '优先级', oldValue: localIssue.priority, newValue: updates.priority
         });
     }
@@ -173,7 +174,7 @@ const IssueDetailPane: React.FC<IssueDetailPaneProps> = ({
          const oldName = users.find(u => u.id === localIssue.assigneeId)?.name || '未分配';
          const newName = users.find(u => u.id === updates.assigneeId)?.name || '未分配';
          newActivities.push({
-            id: Math.random().toString(), type: 'update', userId: resolveActivityUserId(currentUser?.id), timestamp: new Date(),
+            id: Math.random().toString(), type: 'update', userId: resolveActivityUserId(currentUser?.id), timestamp: getBeijingNow(),
             field: '负责人', oldValue: oldName, newValue: newName
         });
     }
@@ -196,7 +197,7 @@ const IssueDetailPane: React.FC<IssueDetailPaneProps> = ({
             updates.assigneeId = qaAssigneeId;
             const qaName = users.find(u => u.id === qaAssigneeId)?.name;
             newActivities.push({
-                id: Math.random().toString(), type: 'update', userId: 'system', timestamp: new Date(),
+                id: Math.random().toString(), type: 'update', userId: 'system', timestamp: getBeijingNow(),
                 field: '负责人 (自动)', oldValue: users.find(u => u.id === localIssue.assigneeId)?.name, newValue: qaName || '未分配'
             });
         }
@@ -206,7 +207,7 @@ const IssueDetailPane: React.FC<IssueDetailPaneProps> = ({
     const updated = { 
         ...localIssue, 
         ...updates, 
-        updatedAt: new Date(),
+        updatedAt: getBeijingNow(),
         activities: [...newActivities, ...(localIssue.activities || [])] // Prepend new activities
     };
     
@@ -465,7 +466,7 @@ ${related}
                 {currentTeam && <TeamIcon name={currentTeam.name} />}
                 <span className="font-semibold">{localIssue.identifier}</span>
              </span>
-             <span className="text-muted/60">上次编辑 {new Date(localIssue.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+             <span className="text-muted/60">上次编辑 {formatBeijingTime(localIssue.updatedAt, { hour: '2-digit', minute:'2-digit' })}</span>
          </div>
          <div className="flex items-center gap-2">
              <button onClick={() => { if(confirm('确认删除?')) { onDelete(localIssue.id); } }} className="p-2 text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all">
@@ -1111,7 +1112,8 @@ ${related}
                              <div className="flex-1 pt-1">
                                  <div className="flex items-center gap-2 mb-0.5">
                                      <span className="font-semibold text-main">{user.name}</span>
-                                     <span className="text-muted text-xs">{new Date(act.timestamp).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+                                      <span className="text-muted text-xs">{formatBeijingDateTime(act.timestamp, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+
                                  </div>
                                  <div className="text-main/80">
                                      {act.type === 'create' && (

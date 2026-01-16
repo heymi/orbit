@@ -7,6 +7,7 @@ const SIDEBAR_NARROW_BREAKPOINT = 1800;
 const SIDEBAR_NARROW_RATIO = 0.8;
 import { Sparkles, Send, MessageSquare } from 'lucide-react';
 import { Issue, Project, User } from '../types';
+import { getBeijingNow } from '../constants';
 import { answerWorkspaceQuestion, recommendWorkspaceTasks } from '../services/geminiService';
 
 interface WorkspaceAiPanelProps {
@@ -45,7 +46,7 @@ const normalizeStoredMessages = (raw: Array<Partial<ChatMessage>>): ChatMessage[
     .map(item => ({
       role: item.role as ChatMessage['role'],
       content: item.content as string,
-      createdAt: item.createdAt || new Date().toISOString(),
+      createdAt: item.createdAt || getBeijingNow().toISOString(),
     }))
 );
 
@@ -211,11 +212,11 @@ const WorkspaceAiPanel: React.FC<WorkspaceAiPanelProps> = ({
   const handleRecommendTasks = async () => {
     if (isLoading) return;
     setIsLoading(true);
-    setMessages(prev => [...prev, { role: 'user', content: '推荐与我强关联的未认领任务。', createdAt: new Date().toISOString() }]);
+    setMessages(prev => [...prev, { role: 'user', content: '推荐与我强关联的未认领任务。', createdAt: getBeijingNow().toISOString() }]);
 
     if (availableIssues.length === 0) {
       setRecommendedTasks([]);
-      setMessages(prev => [...prev, { role: 'ai', content: '当前没有可认领的任务。', createdAt: new Date().toISOString() }]);
+      setMessages(prev => [...prev, { role: 'ai', content: '当前没有可认领的任务。', createdAt: getBeijingNow().toISOString() }]);
       setIsLoading(false);
       setActiveQuickAction(null);
       return;
@@ -237,12 +238,12 @@ const WorkspaceAiPanel: React.FC<WorkspaceAiPanelProps> = ({
       setRecommendedTasks(mapped);
       setMessages(prev => [
         ...prev,
-        { role: 'ai', content: mapped.length ? '已整理强关联任务，见下方卡片。' : '暂时没有合适的未认领任务。', createdAt: new Date().toISOString() },
+        { role: 'ai', content: mapped.length ? '已整理强关联任务，见下方卡片。' : '暂时没有合适的未认领任务。', createdAt: getBeijingNow().toISOString() },
       ]);
     } catch (err: any) {
       setMessages(prev => [
         ...prev,
-        { role: 'ai', content: `推荐失败：${err?.message || '未知错误'}`, createdAt: new Date().toISOString() },
+        { role: 'ai', content: `推荐失败：${err?.message || '未知错误'}`, createdAt: getBeijingNow().toISOString() },
       ]);
     } finally {
       setIsLoading(false);
@@ -261,7 +262,7 @@ const WorkspaceAiPanel: React.FC<WorkspaceAiPanelProps> = ({
     }
 
     setIsLoading(true);
-    setMessages(prev => [...prev, { role: 'user', content: query, createdAt: new Date().toISOString() }]);
+    setMessages(prev => [...prev, { role: 'user', content: query, createdAt: getBeijingNow().toISOString() }]);
 
     try {
       const answer = await answerWorkspaceQuestion({
@@ -270,11 +271,11 @@ const WorkspaceAiPanel: React.FC<WorkspaceAiPanelProps> = ({
         issues: myIssues,
         projects,
       });
-      setMessages(prev => [...prev, { role: 'ai', content: answer, createdAt: new Date().toISOString() }]);
+      setMessages(prev => [...prev, { role: 'ai', content: answer, createdAt: getBeijingNow().toISOString() }]);
     } catch (err: any) {
       setMessages(prev => [
         ...prev,
-        { role: 'ai', content: `请求失败：${err?.message || '未知错误'}`, createdAt: new Date().toISOString() },
+        { role: 'ai', content: `请求失败：${err?.message || '未知错误'}`, createdAt: getBeijingNow().toISOString() },
       ]);
     } finally {
       setIsLoading(false);

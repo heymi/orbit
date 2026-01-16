@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Repeat } from 'lucide-react';
 import { Cycle } from '../types';
+import { BEIJING_TIME_ZONE, getBeijingNow } from '../constants';
 
 interface CreateCycleModalProps {
   isOpen: boolean;
@@ -9,7 +10,7 @@ interface CreateCycleModalProps {
   existingCycle?: Cycle | null;
 }
 
-const toInputDate = (date: Date) => date.toLocaleDateString('en-CA');
+const toInputDate = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: BEIJING_TIME_ZONE });
 
 const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, onSave, existingCycle }) => {
   const [name, setName] = useState('');
@@ -29,8 +30,8 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
       setIsReleased(!!existingCycle.isReleased);
       setGoals(existingCycle.goals || []);
     } else {
-      const start = new Date();
-      const end = new Date();
+      const start = getBeijingNow();
+      const end = getBeijingNow();
       end.setDate(start.getDate() + 13);
       setName('');
       setStartDate(toInputDate(start));
@@ -57,8 +58,8 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
     e.preventDefault();
     if (!name.trim()) return;
     if (!startDate || !endDate) return;
-    const parsedStart = new Date(startDate);
-    const parsedEnd = new Date(endDate);
+    const parsedStart = new Date(`${startDate}T00:00:00+08:00`);
+    const parsedEnd = new Date(`${endDate}T00:00:00+08:00`);
     if (parsedStart.getTime() > parsedEnd.getTime()) {
       alert('结束日期不能早于开始日期。');
       return;

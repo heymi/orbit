@@ -19,6 +19,8 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
   const [description, setDescription] = useState('');
   const [isReleased, setIsReleased] = useState(false);
   const [goals, setGoals] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -46,6 +48,14 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
     setGoals(prev => prev.map((goal, i) => (i === index ? value : goal)));
   };
 
+  const handleGoalKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isComposing) return;
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addGoal();
+    }
+  };
+
   const addGoal = () => {
     setGoals(prev => [...prev, '']);
   };
@@ -56,6 +66,7 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!name.trim()) return;
     if (!startDate || !endDate) return;
     const parsedStart = new Date(`${startDate}T00:00:00+08:00`);
@@ -65,16 +76,23 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
       return;
     }
 
-    await onSave({
-      id: existingCycle ? existingCycle.id : Math.random().toString(36).slice(2, 9),
-      name: name.trim(),
-      startDate: parsedStart,
-      endDate: parsedEnd,
-      description: description.trim() || undefined,
-      isReleased,
-      goals: goals.map(goal => goal.trim()).filter(Boolean),
-    });
-    onClose();
+    setIsSaving(true);
+    try {
+      await onSave({
+        id: existingCycle ? existingCycle.id : Math.random().toString(36).slice(2, 9),
+        name: name.trim(),
+        startDate: parsedStart,
+        endDate: parsedEnd,
+        description: description.trim() || undefined,
+        isReleased,
+        goals: goals.map(goal => goal.trim()).filter(Boolean),
+      });
+      onClose();
+    } catch (err: any) {
+      alert(err?.message || '保存失败');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -156,13 +174,20 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
                 </div>
               )}
               {goals.map((goal, index) => (
-                <div key={`${index}-${goal}`} className="flex items-center gap-2">
+                <div key={`${index}`} className="flex items-center gap-2">
                   <input
-                    value={goal}
-                    onChange={(e) => updateGoal(index, e.target.value)}
-                    className="flex-1 bg-black/5 dark:bg-white/5 rounded-xl px-3 py-2 text-sm text-main focus:outline-none focus:ring-2 focus:ring-accent/20"
-                    placeholder={`目标 ${index + 1}`}
-                  />
+                     value={goal}
+                     onChange={(e) => updateGoal(index, e.target.value)}
+                     onKeyDown={handleGoalKeyDown}
+                     onCompositionStart={() => setIsComposing(true)}
+                     onCompositionEnd={(e) => {
+                       setIsComposing(false);
+                       updateGoal(index, (e.target as HTMLInputElement).value);
+                     }}
+                     className="flex-1 bg-black/5 dark:bg-white/5 rounded-xl px-3 py-2 text-sm text-main focus:outline-none focus:ring-2 focus:ring-accent/20"
+                     placeholder={`目标 ${index + 1}`}
+                   />
+
                   <button
                     type="button"
                     onClick={() => removeGoal(index)}
@@ -188,7 +213,7 @@ const CreateCycleModal: React.FC<CreateCycleModalProps> = ({ isOpen, onClose, on
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl text-muted hover:text-main hover:bg-black/5 dark:hover:bg-white/10 transition-colors">取消</button>
-            <button type="submit" className="px-4 py-2 text-sm rounded-xl bg-main text-surface hover:scale-[1.02] active:scale-95 transition-all shadow">保存</button>
+            <button type="submit" disabled={isSaving} className={`px-4 py-2 text-sm rounded-xl transition-all shadow ${isSaving ? 'bg-black/10 text-muted cursor-not-allowed' : 'bg-main text-surface hover:scale-[1.02] active:scale-95'}`}>保存</button>
           </div>
         </form>
       </div>

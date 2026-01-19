@@ -1805,26 +1805,31 @@ function App() {
          
          {/* Detail Pane */}
           {selectedIssue && (
-                    <IssueDetailPane
-                      issue={selectedIssue}
-                      onClose={() => setSelectedIssueId(null)}
-                      onUpdate={async (u) => updateIssue(u)}
-                      onAddComment={async (issueId, activity) => {
-                        const result = await updateIssueComment(issueId, activity);
-                        return result;
-                      }}
-                      onDeleteComment={async (issueId, activityId, userId) => {
-                        await deleteIssueComment(issueId, activityId, userId);
-                      }}
-                      onSelectIssue={(issueId) => setSelectedIssueId(issueId)}
-                      onDelete={async (id) => { await deleteIssue(id); setSelectedIssueId(null); }}
-                      users={users}
-                      teams={teams}
-                      cycles={cycles}
-                      projects={projects}
-                      issues={issues}
-                      currentUser={currentUserRecord}
-                    />
+            <div className="absolute inset-0 z-30 flex justify-end">
+              <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" onClick={() => setSelectedIssueId(null)}></div>
+              <div className="w-full md:w-[50vw] md:max-w-[50vw] h-full shadow-2xl animate-scale-in relative">
+                <IssueDetailPane
+                  issue={selectedIssue}
+                  onClose={() => setSelectedIssueId(null)}
+                  onUpdate={async (u) => updateIssue(u)}
+                  onAddComment={async (issueId, activity) => {
+                    const result = await updateIssueComment(issueId, activity);
+                    return result;
+                  }}
+                  onDeleteComment={async (issueId, activityId, userId) => {
+                    await deleteIssueComment(issueId, activityId, userId);
+                  }}
+                  onSelectIssue={(issueId) => setSelectedIssueId(issueId)}
+                  onDelete={async (id) => { await deleteIssue(id); setSelectedIssueId(null); }}
+                  users={users}
+                  teams={teams}
+                  cycles={cycles}
+                  projects={projects}
+                  issues={issues}
+                  currentUser={currentUserRecord}
+                />
+              </div>
+            </div>
           )}
 
       </main>
@@ -1846,11 +1851,11 @@ function App() {
       <CreateProjectModal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} onSave={handleSaveProject} onDelete={handleDeleteProject} existingProject={editingProject} />
       <CreateCycleModal
         isOpen={isCycleModalOpen}
-        onClose={() => setIsCycleModalOpen(false)}
+        onClose={() => { setIsCycleModalOpen(false); setEditingCycle(null); }}
         existingCycle={editingCycle}
         onSave={async (cycle) => {
           if (editingCycle) {
-            await updateCycle(cycle);
+            await updateCycle({ ...cycle, id: editingCycle.id });
           } else {
             const { id, ...payload } = cycle;
             await createCycle(payload);

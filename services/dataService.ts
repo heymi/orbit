@@ -528,29 +528,71 @@ export const fetchCycles = async (): Promise<Cycle[]> => {
 
 export const createCycle = async (cycle: Omit<Cycle, 'id'>): Promise<Cycle> => {
   if (!currentOrgId) throw new Error('No organization selected');
-  const { data, error } = await supabase.from('cycles').insert({
+  const payload: Record<string, unknown> = {
     org_id: currentOrgId,
     name: cycle.name,
     start_date: cycle.startDate.toISOString(),
     end_date: cycle.endDate.toISOString(),
     description: cycle.description || null,
     is_released: cycle.isReleased || false,
-    goals: cycle.goals || [],
-  }).select().single();
-  if (error) throw error;
+  };
+  if (cycle.goals && cycle.goals.length > 0) {
+    payload.goals = cycle.goals;
+  }
+  const { data, error } = await supabase.from('cycles').insert(payload).select().single();
+  if (error) {
+    if (String(error.message || '').includes("'goals'")) {
+      const { data: fallback, error: fallbackError } = await supabase
+        .from('cycles')
+        .insert({
+          org_id: currentOrgId,
+          name: cycle.name,
+          start_date: cycle.startDate.toISOString(),
+          end_date: cycle.endDate.toISOString(),
+          description: cycle.description || null,
+          is_released: cycle.isReleased || false,
+        })
+        .select()
+        .single();
+      if (fallbackError) throw fallbackError;
+      return toCycle(fallback);
+    }
+    throw error;
+  }
   return toCycle(data);
 };
 
 export const updateCycle = async (cycle: Cycle): Promise<Cycle> => {
-  const { data, error } = await supabase.from('cycles').update({
+  const payload: Record<string, unknown> = {
     name: cycle.name,
     start_date: cycle.startDate.toISOString(),
     end_date: cycle.endDate.toISOString(),
     description: cycle.description || null,
     is_released: cycle.isReleased || false,
-    goals: cycle.goals || [],
-  }).eq('id', cycle.id).select().single();
-  if (error) throw error;
+  };
+  if (cycle.goals && cycle.goals.length > 0) {
+    payload.goals = cycle.goals;
+  }
+  const { data, error } = await supabase.from('cycles').update(payload).eq('id', cycle.id).select().single();
+  if (error) {
+    if (String(error.message || '').includes("'goals'")) {
+      const { data: fallback, error: fallbackError } = await supabase
+        .from('cycles')
+        .update({
+          name: cycle.name,
+          start_date: cycle.startDate.toISOString(),
+          end_date: cycle.endDate.toISOString(),
+          description: cycle.description || null,
+          is_released: cycle.isReleased || false,
+        })
+        .eq('id', cycle.id)
+        .select()
+        .single();
+      if (fallbackError) throw fallbackError;
+      return toCycle(fallback);
+    }
+    throw error;
+  }
   return toCycle(data);
 };
 

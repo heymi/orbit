@@ -28,6 +28,7 @@ import { buildIdentifier } from './services/identifier';
 import { isBugIssue } from './services/bugHelpers';
 import { buildBugStats } from './services/bugStats';
 import { getDefaultsForView } from './services/viewDefaults';
+import { formatBeijingDate, formatBeijingDateTime, formatBeijingTime, getBeijingNow } from './constants';
 
 const DEFAULT_VIEW_STATE: ViewState = { type: 'my' };
 const DEFAULT_PIPELINE_STAGE: NonNullable<ViewState['pipelineStage']> = 'building';
@@ -184,7 +185,7 @@ const IssueCard: React.FC<{
               {isDeployed && <Rocket size={10} className="text-green-500" />}
               {isRejected && <XCircle size={10} className="text-red-500" />}
             </span>
-            <span className="text-[10px] text-muted">{new Date(issue.createdAt).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric'})}</span>
+            <span className="text-[10px] text-muted">{formatBeijingDate(issue.createdAt, { month: 'numeric', day: 'numeric' })}</span>
          </div>
 
          <h3 className={`text-sm font-medium leading-snug mb-1.5 transition-colors line-clamp-2 
@@ -312,7 +313,7 @@ const IssueRow: React.FC<{
           ))}
        </div>
        <div className="hidden md:block shrink-0 text-xs text-muted w-16 text-right">
-          {new Date(issue.createdAt).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric'})}
+          {formatBeijingDate(issue.createdAt, { month: 'numeric', day: 'numeric' })}
        </div>
        <div className="shrink-0 w-28 flex justify-end">
           {assignee ? (
@@ -404,12 +405,13 @@ const BusinessDashboardHeader: React.FC<{ issues: Issue[], inboxTeamId: string, 
     );
 };
 
-const EngineeringDashboardHeader: React.FC<{ issues: Issue[], cycles: Cycle[], engTeamId: string }> = ({ issues, cycles, engTeamId }) => {
+  const EngineeringDashboardHeader: React.FC<{ issues: Issue[], cycles: Cycle[], engTeamId: string }> = ({ issues, cycles, engTeamId }) => {
     // Current Cycle Stats
     const currentCycle = cycles.find(c => {
-        const now = new Date();
-        return now >= c.startDate && now <= c.endDate;
+        const nowInBeijing = getBeijingNow();
+        return nowInBeijing >= c.startDate && nowInBeijing <= c.endDate;
     }) || cycles[0];
+
 
     const cycleIssues = currentCycle ? issues.filter(i => i.cycleId === currentCycle.id) : [];
     const totalCycle = cycleIssues.length;
@@ -561,6 +563,8 @@ function App() {
     error: dataError,
     createIssue,
     updateIssue,
+    updateIssueComment,
+    deleteIssueComment,
     deleteIssue,
     updateUser,
     updateUserPreferences,
@@ -591,6 +595,7 @@ function App() {
   
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => (localStorage.getItem('theme') as any) || 'system');
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const issueSelectionRef = useRef<string | null>(null);
   const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('priority'); 
   const [groupBy, setGroupBy] = useState<GroupOption>('status');
@@ -602,6 +607,26 @@ function App() {
     const saved = localStorage.getItem('pipelineFilter');
     return saved === 'feature' || saved === 'bug' || saved === 'all' ? saved : 'all';
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const issueId = params.get('issue');
+    if (issueId && issueId !== issueSelectionRef.current) {
+      setSelectedIssueId(issueId);
+      issueSelectionRef.current = issueId;
+    }
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedIssueId) {
+      url.searchParams.set('issue', selectedIssueId);
+    } else {
+      url.searchParams.delete('issue');
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    issueSelectionRef.current = selectedIssueId;
+  }, [selectedIssueId]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -793,8 +818,8 @@ function App() {
 
   // Cycle Logic
   const currentCycle = useMemo(() => {
-    const now = new Date();
-    return cycles.find(c => now >= c.startDate && now <= c.endDate) || cycles[0];
+    const nowInBeijing = getBeijingNow();
+    return cycles.find(c => nowInBeijing >= c.startDate && nowInBeijing <= c.endDate) || cycles[0];
   }, [cycles]);
 
   // Theme Logic
@@ -890,7 +915,7 @@ function App() {
   }, [myIssues, projects]);
 
   const renderWorkspaceActivity = (activity: Activity) => {
-    if (activity.type === 'comment') return <span>添加了评论</span>;
+    if (activity.type === 'comment') return <span>评论：{activity.newValue || '（空）'}</span>;
     if (activity.type === 'update' && activity.field) {
       if (activity.newValue) {
         return (
@@ -912,7 +937,7 @@ function App() {
 
   const recentUpdates = useMemo(() => {
     if (!user) return [];
-    const now = new Date();
+    const now = getBeijingNow();
     const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     return issues
@@ -1419,7 +1444,7 @@ function App() {
                           key={c.id}
                           icon={<Repeat size={18} />}
                           label={c.name}
-                          subLabel={`${c.startDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} - ${c.endDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}`}
+                          subLabel={`${formatBeijingDate(c.startDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')} - ${formatBeijingDate(c.endDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')}`}
                           isActive={viewState.type === 'cycle' && viewState.cycleId === c.id}
                           onClick={() => setViewState({ type: 'cycle', cycleId: c.id })}
                           count={issues.filter(i => i.cycleId === c.id).length}
@@ -1613,8 +1638,8 @@ function App() {
                                           <div className="text-[9px] text-muted truncate mt-0.5">{issue.title}</div>
                                         </div>
                                         <div className="text-[9px] text-muted text-right flex flex-col items-end gap-0.5 leading-4">
-                                          <div>{timestamp.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}</div>
-                                          <div>{timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</div>
+                                          <div>{formatBeijingDate(timestamp, { month: '2-digit', day: '2-digit' }, 'zh-CN')}</div>
+                                          <div>{formatBeijingTime(timestamp, { hour: '2-digit', minute: '2-digit' }, 'zh-CN')}</div>
                                         </div>
                                       </button>
                                     );
@@ -1779,14 +1804,29 @@ function App() {
          )}
          
          {/* Detail Pane */}
-         {selectedIssue && (
-            <div className="absolute inset-0 z-30 flex justify-end">
-                <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" onClick={() => setSelectedIssueId(null)}></div>
-                <div className="w-full md:w-[50vw] md:max-w-[50vw] h-full shadow-2xl animate-scale-in relative">
-                    <IssueDetailPane issue={selectedIssue} onClose={() => setSelectedIssueId(null)} onUpdate={async (u) => updateIssue(u)} onDelete={async (id) => { await deleteIssue(id); setSelectedIssueId(null); }} users={users} teams={teams} cycles={cycles} projects={projects} issues={issues} currentUser={currentUserRecord} />
-                </div>
-            </div>
-         )}
+          {selectedIssue && (
+                    <IssueDetailPane
+                      issue={selectedIssue}
+                      onClose={() => setSelectedIssueId(null)}
+                      onUpdate={async (u) => updateIssue(u)}
+                      onAddComment={async (issueId, activity) => {
+                        const result = await updateIssueComment(issueId, activity);
+                        return result;
+                      }}
+                      onDeleteComment={async (issueId, activityId, userId) => {
+                        await deleteIssueComment(issueId, activityId, userId);
+                      }}
+                      onSelectIssue={(issueId) => setSelectedIssueId(issueId)}
+                      onDelete={async (id) => { await deleteIssue(id); setSelectedIssueId(null); }}
+                      users={users}
+                      teams={teams}
+                      cycles={cycles}
+                      projects={projects}
+                      issues={issues}
+                      currentUser={currentUserRecord}
+                    />
+          )}
+
       </main>
 
       <UserSettingsModal

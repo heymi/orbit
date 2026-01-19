@@ -1,6 +1,7 @@
 import React from 'react';
 import { CalendarRange, ChevronRight, Edit3, Plus, Repeat } from 'lucide-react';
 import { Cycle, Issue, Status } from '../types';
+import { formatBeijingDate, getBeijingNow } from '../constants';
 import { buildBurndownSeries } from '../services/burndown';
 
 interface CyclesOverviewProps {
@@ -13,11 +14,11 @@ interface CyclesOverviewProps {
 
 const CyclesOverview: React.FC<CyclesOverviewProps> = ({ cycles, issues, onCreate, onEdit, onSelect }) => {
   const sortedCycles = [...cycles].sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
-  const now = new Date();
+  const nowInBeijing = getBeijingNow();
 
   const formatRange = (cycle: Cycle) => {
-    const start = cycle.startDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
-    const end = cycle.endDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+    const start = formatBeijingDate(cycle.startDate, { month: '2-digit', day: '2-digit' }, 'zh-CN');
+    const end = formatBeijingDate(cycle.endDate, { month: '2-digit', day: '2-digit' }, 'zh-CN');
     return `${start} - ${end}`;
   };
 
@@ -50,7 +51,7 @@ const CyclesOverview: React.FC<CyclesOverviewProps> = ({ cycles, issues, onCreat
               const doneCount = cycleIssues.filter(i => i.status === Status.Done || i.status === Status.Closed).length;
               const totalCount = cycleIssues.length;
               const progress = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
-              const phase = now < cycle.startDate ? '未开始' : now > cycle.endDate ? '已结束' : '进行中';
+              const phase = nowInBeijing < cycle.startDate ? '未开始' : nowInBeijing > cycle.endDate ? '已结束' : '进行中';
               const phaseStyle = phase === '进行中' ? 'bg-accent/10 text-accent' : phase === '未开始' ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600';
               const burndown = buildBurndownSeries(cycle, issues);
               const maxValue = Math.max(totalCount, 1);

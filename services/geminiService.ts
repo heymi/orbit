@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { Priority, Subtask, Team, Status } from "../types";
+import { formatBeijingDate, getBeijingNow } from '../constants';
 
 // Helper types for AI response
 export interface AIAnalysisResult {
@@ -210,8 +211,9 @@ const requestDoubao = async (
 
 const generateText = async (prompt: string, config?: { responseMimeType?: string; responseSchema?: unknown }) => {
   const model = getSelectedModel();
+  const promptWithDate = injectBeijingDate(prompt);
   if (model === DOUBAO_MODEL) {
-    return requestDoubao(prompt, {
+    return requestDoubao(promptWithDate, {
       model: DOUBAO_MODEL,
       apiKey: null,
       missingKeyMessage: '火山豆包内置密钥缺失，请配置 ARK_API_KEY。',
@@ -225,7 +227,7 @@ const generateText = async (prompt: string, config?: { responseMimeType?: string
     if (!custom.model) {
       throw new Error('自定义模型名称未配置，请在个人设置中填写。');
     }
-    return requestDoubao(prompt, {
+    return requestDoubao(promptWithDate, {
       model: custom.model,
       apiKey: custom.apiKey,
       missingKeyMessage: '自定义模型 API Key 未配置，请在个人设置中填写。',
@@ -236,7 +238,7 @@ const generateText = async (prompt: string, config?: { responseMimeType?: string
   const ai = getGeminiClient();
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
-    contents: prompt,
+    contents: promptWithDate,
     config,
   });
   return response.text?.trim() || '';
@@ -248,6 +250,11 @@ const parseJsonText = (text: string) => {
     return trimmed.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   }
   return trimmed;
+};
+
+const injectBeijingDate = (prompt: string) => {
+  const today = formatBeijingDate(getBeijingNow(), { year: 'numeric', month: 'numeric', day: 'numeric' }, 'zh-CN');
+  return `今天是北京时间 ${today}。\n\n${prompt}`;
 };
 
 const generateJson = async <T,>(prompt: string, config?: { responseMimeType?: string; responseSchema?: unknown }) => {
@@ -477,7 +484,7 @@ export const answerWorkspaceQuestion = async (input: WorkspaceQuestionInput): Pr
   const issueLines = input.issues.map(issue => {
     const projectName = issue.projectId ? projectMap.get(issue.projectId) || '未归类' : '未归类';
     const updatedAt = issue.updatedAt instanceof Date ? issue.updatedAt : new Date(issue.updatedAt);
-    return `- ${issue.identifier} | ${issue.title} | 状态:${issue.status} | 优先级:${issue.priority} | 项目:${projectName} | 更新时间:${updatedAt.toLocaleDateString('zh-CN')}
+    return `- ${issue.identifier} | ${issue.title} | 状态:${issue.status} | 优先级:${issue.priority} | 项目:${projectName} | 更新时间:${formatBeijingDate(updatedAt, {}, 'zh-CN')}
   描述:${issue.description || '无'}`;
   });
 

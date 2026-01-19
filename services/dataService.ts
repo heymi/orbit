@@ -698,7 +698,7 @@ export const updateIssue = async (issue: Issue): Promise<Issue> => {
     previous_assignee_id: issue.previousAssigneeId || null,
     team_id: issue.teamId,
     project_id: issue.projectId || null,
-    cycle_id: issue.cycleId,
+    cycle_id: issue.cycleId || null,
     labels: issue.labels,
     custom_fields: issue.customFields,
     updated_at: now,
@@ -752,6 +752,48 @@ export const updateIssue = async (issue: Issue): Promise<Issue> => {
   }
 
   return toIssue(data, issue.subtasks, issue.activities);
+};
+
+export const createActivity = async (issueId: string, activity: Activity): Promise<Activity> => {
+  const { id: _id, ...row } = toActivityRow(activity, issueId);
+  const { data, error } = await supabase
+    .from('activities')
+    .insert(row)
+    .select()
+    .single();
+  if (error) throw error;
+  return toActivity(data as DbActivity);
+};
+
+export const deleteActivity = async (activityId: string, userId: string): Promise<void> => {
+  const { data: existing, error: fetchError } = await supabase
+    .from('activities')
+    .select('id, user_id')
+    .eq('id', activityId)
+    .single();
+  if (fetchError) throw fetchError;
+  if (!existing || existing.user_id !== userId) {
+    throw new Error('无权限或评论已被删除');
+  }
+
+  const { error, count } = await supabase
+    .from('activities')
+    .delete({ count: 'exact' })
+    .eq('id', activityId);
+  if (!error && count) return;
+
+  if (!supabaseAdmin) {
+    throw error || new Error('评论删除失败');
+  }
+
+  const { error: adminError, count: adminCount } = await supabaseAdmin
+    .from('activities')
+    .delete({ count: 'exact' })
+    .eq('id', activityId)
+    .eq('user_id', userId);
+  if (adminError || !adminCount) {
+    throw adminError || new Error('评论删除失败');
+  }
 };
 
 export const updateIssueIdentifier = async (issueId: string, identifier: string): Promise<void> => {

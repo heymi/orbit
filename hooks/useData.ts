@@ -21,9 +21,12 @@ interface UseDataReturn {
   error: string | null;
   // Issue 操作
   createIssue: (issue: Omit<Issue, 'id' | 'createdAt' | 'updatedAt' | 'activities'>, userId: string) => Promise<void>;
-  updateIssue: (issue: Issue) => Promise<Issue>;
-  migrateIssueIdentifiers: () => Promise<{ updated: number; total: number }>;
-  deleteIssue: (id: string) => Promise<void>;
+    updateIssue: (issue: Issue) => Promise<Issue>;
+    updateIssueComment: (issueId: string, activity: Issue['activities'][number]) => Promise<Issue | undefined>;
+    deleteIssueComment: (issueId: string, activityId: string, userId: string) => Promise<void>;
+    migrateIssueIdentifiers: () => Promise<{ updated: number; total: number }>;
+    deleteIssue: (id: string) => Promise<void>;
+
   // User 操作
   updateUser: (user: User) => Promise<void>;
   updateUserPreferences: (userId: string, preferences: { themePreference: ThemePreference | null; layoutPreference: LayoutPreference | null }) => Promise<void>;
@@ -218,6 +221,43 @@ export const useData = (): UseDataReturn => {
     }
   }, []);
 
+  const updateIssueComment = useCallback(async (issueId: string, activity: Issue['activities'][number]) => {
+    try {
+      const created = await dataService.createActivity(issueId, activity);
+      const issue = issues.find(item => item.id === issueId);
+      if (!issue) return undefined;
+      const updatedIssue = {
+        ...issue,
+        activities: [created, ...(issue.activities || [])],
+        updatedAt: created.timestamp,
+      } as Issue;
+      setIssues(prev => prev.map(item => item.id === issueId ? updatedIssue : item));
+      return updatedIssue;
+    } catch (err: any) {
+      console.error('Failed to create comment:', err);
+      setError(err?.message || '评论发送失败');
+      throw err;
+    }
+  }, [issues]);
+
+  const deleteIssueComment = useCallback(async (issueId: string, activityId: string, userId: string) => {
+    try {
+      await dataService.deleteActivity(activityId, userId);
+      setIssues(prev => prev.map(item => {
+        if (item.id !== issueId) return item;
+        return {
+          ...item,
+          activities: (item.activities || []).filter(activity => activity.id !== activityId),
+        };
+      }));
+    } catch (err: any) {
+      console.error('Failed to delete comment:', err);
+      setError(err?.message || '评论删除失败');
+      throw err;
+    }
+  }, []);
+
+
   const migrateIssueIdentifiers = useCallback(async () => {
     const existing = new Set<string>();
     let updatedCount = 0;
@@ -320,6 +360,8 @@ export const useData = (): UseDataReturn => {
     error,
     createIssue,
     updateIssue,
+    updateIssueComment,
+    deleteIssueComment,
     deleteIssue,
     migrateIssueIdentifiers,
     updateUser,

@@ -563,6 +563,8 @@ function App() {
     error: dataError,
     createIssue,
     updateIssue,
+    updateIssueComment,
+    deleteIssueComment,
     deleteIssue,
     updateUser,
     updateUserPreferences,
@@ -593,6 +595,7 @@ function App() {
   
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => (localStorage.getItem('theme') as any) || 'system');
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const issueSelectionRef = useRef<string | null>(null);
   const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('priority'); 
   const [groupBy, setGroupBy] = useState<GroupOption>('status');
@@ -604,6 +607,26 @@ function App() {
     const saved = localStorage.getItem('pipelineFilter');
     return saved === 'feature' || saved === 'bug' || saved === 'all' ? saved : 'all';
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const issueId = params.get('issue');
+    if (issueId && issueId !== issueSelectionRef.current) {
+      setSelectedIssueId(issueId);
+      issueSelectionRef.current = issueId;
+    }
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedIssueId) {
+      url.searchParams.set('issue', selectedIssueId);
+    } else {
+      url.searchParams.delete('issue');
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    issueSelectionRef.current = selectedIssueId;
+  }, [selectedIssueId]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -892,7 +915,7 @@ function App() {
   }, [myIssues, projects]);
 
   const renderWorkspaceActivity = (activity: Activity) => {
-    if (activity.type === 'comment') return <span>添加了评论</span>;
+    if (activity.type === 'comment') return <span>评论：{activity.newValue || '（空）'}</span>;
     if (activity.type === 'update' && activity.field) {
       if (activity.newValue) {
         return (
@@ -1781,14 +1804,29 @@ function App() {
          )}
          
          {/* Detail Pane */}
-         {selectedIssue && (
-            <div className="absolute inset-0 z-30 flex justify-end">
-                <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" onClick={() => setSelectedIssueId(null)}></div>
-                <div className="w-full md:w-[50vw] md:max-w-[50vw] h-full shadow-2xl animate-scale-in relative">
-                    <IssueDetailPane issue={selectedIssue} onClose={() => setSelectedIssueId(null)} onUpdate={async (u) => updateIssue(u)} onDelete={async (id) => { await deleteIssue(id); setSelectedIssueId(null); }} users={users} teams={teams} cycles={cycles} projects={projects} issues={issues} currentUser={currentUserRecord} />
-                </div>
-            </div>
-         )}
+          {selectedIssue && (
+                    <IssueDetailPane
+                      issue={selectedIssue}
+                      onClose={() => setSelectedIssueId(null)}
+                      onUpdate={async (u) => updateIssue(u)}
+                      onAddComment={async (issueId, activity) => {
+                        const result = await updateIssueComment(issueId, activity);
+                        return result;
+                      }}
+                      onDeleteComment={async (issueId, activityId, userId) => {
+                        await deleteIssueComment(issueId, activityId, userId);
+                      }}
+                      onSelectIssue={(issueId) => setSelectedIssueId(issueId)}
+                      onDelete={async (id) => { await deleteIssue(id); setSelectedIssueId(null); }}
+                      users={users}
+                      teams={teams}
+                      cycles={cycles}
+                      projects={projects}
+                      issues={issues}
+                      currentUser={currentUserRecord}
+                    />
+          )}
+
       </main>
 
       <UserSettingsModal

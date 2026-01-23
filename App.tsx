@@ -8,7 +8,10 @@ import {
   LayoutGrid, List, BarChart3, Clock, AlertTriangle, Check, LogOut, ChevronDown, ChevronRight, Edit3,
   MessageSquare
 } from './components/Icons';
-import ChatView from './components/ChatView';
+import NarrowSidebar, { SidebarMode } from './components/NarrowSidebar';
+import ChatChannelsPane from './components/ChatChannelsPane';
+import ChatMessagesPane from './components/ChatMessagesPane';
+import { useChat } from './hooks/useChat';
 import CreateIssueModal from './components/CreateIssueModal';
 import CreateProjectModal from './components/CreateProjectModal'; 
 import CreateCycleModal from './components/CreateCycleModal';
@@ -610,6 +613,16 @@ function App() {
     const saved = localStorage.getItem('pipelineFilter');
     return saved === 'feature' || saved === 'bug' || saved === 'all' ? saved : 'all';
   });
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() => {
+    const saved = localStorage.getItem('sidebarMode');
+    return saved === 'chat' ? 'chat' : 'project';
+  });
+
+  // Chat hook - always call at top level
+  const chatHook = useChat({ 
+    orgId: currentOrg?.id || null, 
+    userId: user?.id || null 
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -702,6 +715,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem('viewState', JSON.stringify(viewState));
   }, [viewState]);
+
+  useEffect(() => {
+    localStorage.setItem('sidebarMode', sidebarMode);
+    // When switching to chat mode, set viewState to chat
+    if (sidebarMode === 'chat' && viewState.type !== 'chat') {
+      setViewState({ type: 'chat' });
+    }
+    // When switching to project mode from chat, go back to default view
+    if (sidebarMode === 'project' && viewState.type === 'chat') {
+      setViewState({ type: 'my' });
+    }
+  }, [sidebarMode]);
 
   useEffect(() => {
     if (loading) return;
@@ -1379,8 +1404,24 @@ function App() {
   return (
     <div className="flex h-screen w-full bg-background text-main font-sans selection:bg-accent/20 overflow-hidden relative">
       
-      {/* Sidebar */}
-      <div className="fixed left-4 top-4 bottom-4 w-[260px] max-[1800px]:w-[208px] flex flex-col z-20 hidden md:flex">
+      {/* Sidebar Container: Narrow Rail + Wide Panel */}
+      <div className="fixed left-4 top-4 bottom-4 w-[324px] max-[1800px]:w-[272px] flex gap-2 z-20 hidden md:flex">
+        {/* Narrow Rail */}
+        <NarrowSidebar
+          mode={sidebarMode}
+          onModeChange={setSidebarMode}
+          projects={projects}
+          currentProjectId={viewState.type === 'project' ? viewState.projectId || null : null}
+          onProjectSelect={(projectId) => {
+            setSidebarMode('project');
+            setViewState({ type: 'project', projectId });
+          }}
+          onCreateProject={openCreateProjectModal}
+          orgInitial={currentOrg.name.charAt(0).toUpperCase()}
+          totalUnread={chatHook.totalUnread}
+        />
+
+        {/* Wide Panel */}
         <aside className="flex-1 glass-panel rounded-3xl shadow-floating flex flex-col p-4 overflow-hidden">
             {/* 组织选择器 */}
             <div className="relative mb-4">
@@ -1392,7 +1433,7 @@ function App() {
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">
                     {currentOrg.name.charAt(0).toUpperCase()}
                   </div>
-                  <span className="ml-2 font-medium text-sm text-main truncate max-w-[140px]">{currentOrg.name}</span>
+                  <span className="ml-2 font-medium text-sm text-main truncate max-w-[120px]">{currentOrg.name}</span>
                 </div>
                 <ChevronDown size={16} className={`text-muted transition-transform ${showOrgDropdown ? 'rotate-180' : ''}`} />
               </button>
@@ -1425,53 +1466,60 @@ function App() {
               )}
             </div>
 
-            <nav className="flex-1 overflow-y-auto pr-1">
-                <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-2">我的视图</div>
-                <SidebarItem icon={<UserIcon size={18} />} label="我的工作台" isActive={viewState.type === 'my'} onClick={() => setViewState({ type: 'my' })} count={issues.filter(i => i.assigneeId === user.id).length} />
-                <SidebarItem icon={<AlertCircle size={18} className="text-rose-500" />} label="Bug" isActive={viewState.type === 'bug'} onClick={() => setViewState({ type: 'bug' })} count={issues.filter(isBugIssue).length} />
-                {engTeam && <SidebarItem icon={<Zap size={18} className="text-yellow-500" />} label="研发看板" isActive={viewState.type === 'team' && viewState.teamId === ENGINEERING_ID} onClick={() => setViewState({ type: 'team', teamId: ENGINEERING_ID })} count={issues.filter(i => i.teamId === ENGINEERING_ID).length} onDragOver={allowDrop} onDrop={handleDropToTeam(ENGINEERING_ID)} onDragEnter={() => setDragHoverTarget('team_eng')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'team_eng'} />}
+            {/* Conditional Content based on sidebarMode */}
+            {sidebarMode === 'chat' ? (
+              /* Chat Mode: Show Channels */
+              <ChatChannelsPane
+                channels={chatHook.channels}
+                currentChannelId={chatHook.currentChannelId}
+                onSelect={chatHook.setCurrentChannelId}
+                unreadByChannel={chatHook.unreadByChannel}
+                loading={chatHook.loading}
+              />
+            ) : (
+              /* Project Mode: Show navigation */
+              <>
+                <nav className="flex-1 overflow-y-auto pr-1">
+                    <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-2">我的视图</div>
+                    <SidebarItem icon={<UserIcon size={18} />} label="我的工作台" isActive={viewState.type === 'my'} onClick={() => setViewState({ type: 'my' })} count={issues.filter(i => i.assigneeId === user.id).length} />
+                    <SidebarItem icon={<AlertCircle size={18} className="text-rose-500" />} label="Bug" isActive={viewState.type === 'bug'} onClick={() => setViewState({ type: 'bug' })} count={issues.filter(isBugIssue).length} />
+                    {engTeam && <SidebarItem icon={<Zap size={18} className="text-yellow-500" />} label="研发看板" isActive={viewState.type === 'team' && viewState.teamId === ENGINEERING_ID} onClick={() => setViewState({ type: 'team', teamId: ENGINEERING_ID })} count={issues.filter(i => i.teamId === ENGINEERING_ID).length} onDragOver={allowDrop} onDrop={handleDropToTeam(ENGINEERING_ID)} onDragEnter={() => setDragHoverTarget('team_eng')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'team_eng'} />}
 
-                <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">交付流水线</div>
-                <SidebarItem icon={<Inbox size={18} />} label="待规划" subLabel="Triage" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'triage'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'triage' })} count={issues.filter(i => i.teamId === REQUIREMENT_POOL_ID || i.status === Status.Backlog).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('triage')} onDragEnter={() => setDragHoverTarget('pipeline_triage')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_triage'} />
-                <SidebarItem icon={<Zap size={18} />} label="构建中" subLabel="Building" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'building'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'building' })} count={issues.filter(i => i.teamId === ENGINEERING_ID && (i.status === Status.Todo || i.status === Status.InProgress)).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('building')} onDragEnter={() => setDragHoverTarget('pipeline_building')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_building'} />
-                <SidebarItem icon={<GitMerge size={18} />} label="待验收" subLabel="Ready for QA" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'qa'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'qa' })} count={issues.filter(i => i.status === Status.CodeMerged || i.status === Status.InQA).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('qa')} onDragEnter={() => setDragHoverTarget('pipeline_qa')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_qa'} />
-                <SidebarItem icon={<Rocket size={18} />} label="已发布" subLabel="Live" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'live'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'live' })} count={issues.filter(i => i.status === Status.Done || i.status === Status.Closed).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('live')} onDragEnter={() => setDragHoverTarget('pipeline_live')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_live'} />
+                    <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">交付流水线</div>
+                    <SidebarItem icon={<Inbox size={18} />} label="待规划" subLabel="Triage" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'triage'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'triage' })} count={issues.filter(i => i.teamId === REQUIREMENT_POOL_ID || i.status === Status.Backlog).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('triage')} onDragEnter={() => setDragHoverTarget('pipeline_triage')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_triage'} />
+                    <SidebarItem icon={<Zap size={18} />} label="构建中" subLabel="Building" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'building'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'building' })} count={issues.filter(i => i.teamId === ENGINEERING_ID && (i.status === Status.Todo || i.status === Status.InProgress)).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('building')} onDragEnter={() => setDragHoverTarget('pipeline_building')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_building'} />
+                    <SidebarItem icon={<GitMerge size={18} />} label="待验收" subLabel="Ready for QA" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'qa'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'qa' })} count={issues.filter(i => i.status === Status.CodeMerged || i.status === Status.InQA).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('qa')} onDragEnter={() => setDragHoverTarget('pipeline_qa')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_qa'} />
+                    <SidebarItem icon={<Rocket size={18} />} label="已发布" subLabel="Live" isActive={viewState.type === 'pipeline' && viewState.pipelineStage === 'live'} onClick={() => setViewState({ type: 'pipeline', pipelineStage: 'live' })} count={issues.filter(i => i.status === Status.Done || i.status === Status.Closed).length} onDragOver={allowDrop} onDrop={handleDropToPipeline('live')} onDragEnter={() => setDragHoverTarget('pipeline_live')} onDragLeave={() => setDragHoverTarget(null)} isDragTarget={dragHoverTarget === 'pipeline_live'} />
 
-                <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">迭代</div>
-                <SidebarItem icon={<Repeat size={18} />} label="迭代总览" isActive={viewState.type === 'cycles'} onClick={() => setViewState({ type: 'cycles' })} />
-                {sortedCycles.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-muted">暂无迭代</div>
-                ) : (
-                    sortedCycles.map(c => (
-                        <SidebarItem
-                          key={c.id}
-                          icon={<Repeat size={18} />}
-                          label={c.name}
-                          subLabel={`${formatBeijingDate(c.startDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')} - ${formatBeijingDate(c.endDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')}`}
-                          isActive={viewState.type === 'cycle' && viewState.cycleId === c.id}
-                          onClick={() => setViewState({ type: 'cycle', cycleId: c.id })}
-                          count={issues.filter(i => i.cycleId === c.id).length}
-                          isReleased={c.isReleased}
-                        />
-                    ))
-                )}
+                    <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">迭代</div>
+                    <SidebarItem icon={<Repeat size={18} />} label="迭代总览" isActive={viewState.type === 'cycles'} onClick={() => setViewState({ type: 'cycles' })} />
+                    {sortedCycles.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted">暂无迭代</div>
+                    ) : (
+                        sortedCycles.map(c => (
+                            <SidebarItem
+                              key={c.id}
+                              icon={<Repeat size={18} />}
+                              label={c.name}
+                              subLabel={`${formatBeijingDate(c.startDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')} - ${formatBeijingDate(c.endDate, { month: '2-digit', day: '2-digit' }, 'zh-CN')}`}
+                              isActive={viewState.type === 'cycle' && viewState.cycleId === c.id}
+                              onClick={() => setViewState({ type: 'cycle', cycleId: c.id })}
+                              count={issues.filter(i => i.cycleId === c.id).length}
+                              isReleased={c.isReleased}
+                            />
+                        ))
+                    )}
 
-                <div className="flex items-center justify-between px-3 mb-2 mt-5 group">
-                     <span className="text-[11px] font-bold text-muted uppercase tracking-wider">项目 (Context)</span>
-                     <button onClick={(e) => { e.stopPropagation(); openCreateProjectModal(); }} className="text-muted hover:text-main opacity-0 group-hover:opacity-100 transition-opacity" title="创建新项目"><Plus size={12} /></button>
-                </div>
-                {projects.map(p => (
-                    <SidebarItem key={p.id} icon={<ProjectIcon icon={p.icon} />} label={p.name} isActive={viewState.type === 'project' && viewState.projectId === p.id} onClick={() => setViewState({ type: 'project', projectId: p.id })} count={issues.filter(i => i.projectId === p.id).length} />
-                ))}
-                <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">沟通</div>
-                <SidebarItem icon={<MessageSquare size={18} />} label="团队聊天" isActive={viewState.type === 'chat'} onClick={() => setViewState({ type: 'chat' })} />
+                    <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">管理</div>
+                    <SidebarItem icon={<Users size={18} />} label="团队成员" isActive={viewState.type === 'members'} onClick={() => setViewState({ type: 'members' })} />
+                    {isAdmin && (
+                      <SidebarItem icon={<ArrowDownWideNarrow size={18} />} label="更新订单编号" isActive={false} onClick={handleMigrateIdentifiers} />
+                    )}
+                </nav>
+              </>
+            )}
 
-                <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">管理</div>
-                <SidebarItem icon={<Users size={18} />} label="团队成员" isActive={viewState.type === 'members'} onClick={() => setViewState({ type: 'members' })} />
-                {isAdmin && (
-                  <SidebarItem icon={<ArrowDownWideNarrow size={18} />} label="更新订单编号" isActive={false} onClick={handleMigrateIdentifiers} />
-                )}
-            </nav>
+            {/* Footer - always visible */}
             <div className="pt-4 mt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between px-2">
                 <button onClick={() => setTheme(prev => prev === 'light' ? 'dark' : prev === 'dark' ? 'system' : 'light')} className="p-2 text-muted hover:text-main rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors">{theme === 'light' ? <Sun size={18} /> : theme === 'dark' ? <Moon size={18} /> : <Monitor size={18} />}</button>
                 <div className="flex items-center gap-2">
@@ -1489,11 +1537,23 @@ function App() {
       </div>
 
       {/* Main Canvas */}
-      <main className="flex-1 flex flex-col h-full md:ml-[290px] mr-4 my-4 rounded-3xl bg-transparent overflow-hidden relative">
+      <main className="flex-1 flex flex-col h-full md:ml-[354px] max-[1800px]:md:ml-[302px] mr-4 my-4 rounded-3xl bg-transparent overflow-hidden relative">
           {viewState.type === 'members' ? (
               <TeamMembersView users={users} currentUser={currentUserRecord} onAddUser={handleUserInvite} onUpdateUser={handleUserUpdate} onDeleteUser={handleUserRemove} />
-          ) : viewState.type === 'chat' ? (
-              <ChatView orgId={currentOrg?.id || ''} userId={user.id} users={users} />
+          ) : viewState.type === 'chat' || sidebarMode === 'chat' ? (
+              <ChatMessagesPane
+                channel={chatHook.currentChannel}
+                messages={chatHook.messages}
+                users={users}
+                currentUserId={user.id}
+                loading={chatHook.loadingMessages}
+                hasMore={chatHook.hasMoreMessages}
+                onLoadMore={chatHook.loadMoreMessages}
+                onSend={chatHook.sendMessage}
+                onTyping={chatHook.sendTyping}
+                typingUserIds={chatHook.typingUserIds}
+                onlineUserIds={chatHook.onlineUserIds}
+              />
           ) : (
 
             <div className="flex-1 flex overflow-hidden">

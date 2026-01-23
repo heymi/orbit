@@ -1,71 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useChat } from '../hooks/useChat';
 import { User, ChatChannel, ChatMessage } from '../types';
 import { Hash, Send, Loader2, MessageSquare } from './Icons';
 import { resolveAvatarUrl } from '../services/avatar';
 import { formatBeijingTime, formatBeijingDate } from '../constants';
 
-interface ChatViewProps {
-  orgId: string;
-  userId: string;
+interface ChatMessagesPaneProps {
+  channel: ChatChannel | null;
+  messages: ChatMessage[];
   users: User[];
+  currentUserId: string;
+  loading: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+  onSend: (body: string) => Promise<void>;
+  onTyping: (isTyping: boolean) => void;
+  typingUserIds: string[];
+  onlineUserIds: string[];
 }
-
-// ============ Channel List ============
-
-interface ChatChannelListProps {
-  channels: ChatChannel[];
-  currentChannelId: string | null;
-  onSelect: (id: string) => void;
-  unreadByChannel: Record<string, number>;
-}
-
-const ChatChannelList: React.FC<ChatChannelListProps> = ({
-  channels,
-  currentChannelId,
-  onSelect,
-  unreadByChannel,
-}) => {
-  return (
-    <div className="w-56 flex-shrink-0 border-r border-black/5 dark:border-white/10 flex flex-col bg-surface/50">
-      <div className="p-4 border-b border-black/5 dark:border-white/10">
-        <h2 className="text-sm font-semibold text-main flex items-center gap-2">
-          <MessageSquare size={16} className="text-accent" />
-          Channels
-        </h2>
-      </div>
-      <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-        {channels.map((channel) => {
-          const isActive = channel.id === currentChannelId;
-          const unread = unreadByChannel[channel.id] || 0;
-          return (
-            <button
-              key={channel.id}
-              onClick={() => onSelect(channel.id)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-                isActive
-                  ? 'bg-accent/10 text-accent font-medium'
-                  : 'text-muted hover:bg-black/5 dark:hover:bg-white/5 hover:text-main'
-              }`}
-            >
-              <Hash size={16} className={isActive ? 'text-accent' : 'text-muted'} />
-              <span className="truncate flex-1 text-left">{channel.name.toLowerCase()}</span>
-              {unread > 0 && (
-                <span className="px-1.5 py-0.5 text-xs font-medium bg-accent text-white rounded-full min-w-[20px] text-center">
-                  {unread > 99 ? '99+' : unread}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
-  );
-};
 
 // ============ Message List ============
 
-interface ChatMessageListProps {
+interface MessageListProps {
   messages: ChatMessage[];
   users: User[];
   currentUserId: string;
@@ -73,10 +28,9 @@ interface ChatMessageListProps {
   hasMore: boolean;
   onLoadMore: () => void;
   typingUserIds: string[];
-  onlineUserIds: string[];
 }
 
-const ChatMessageList: React.FC<ChatMessageListProps> = ({
+const MessageList: React.FC<MessageListProps> = ({
   messages,
   users,
   currentUserId,
@@ -155,7 +109,7 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({
             {loading ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
-              '加载更多'
+              'Load more'
             )}
           </button>
         </div>
@@ -224,8 +178,8 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({
         <div className="flex items-center gap-2 text-xs text-muted animate-pulse">
           <span>
             {typingUsers.length === 1
-              ? `${typingUsers[0]} 正在输入...`
-              : `${typingUsers.slice(0, 2).join(', ')} 正在输入...`}
+              ? `${typingUsers[0]} is typing...`
+              : `${typingUsers.slice(0, 2).join(', ')} are typing...`}
           </span>
         </div>
       )}
@@ -237,17 +191,13 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({
 
 // ============ Composer ============
 
-interface ChatComposerProps {
+interface ComposerProps {
   onSend: (body: string) => Promise<void>;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
 }
 
-const ChatComposer: React.FC<ChatComposerProps> = ({
-  onSend,
-  onTyping,
-  disabled,
-}) => {
+const Composer: React.FC<ComposerProps> = ({ onSend, onTyping, disabled }) => {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -281,7 +231,6 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
         clearTimeout(typingTimeoutRef.current);
       }
       onTyping(false);
-      // Focus back to textarea
       textareaRef.current?.focus();
     } catch (err) {
       console.error('Send failed:', err);
@@ -317,7 +266,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
             value={text}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+            placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
             disabled={disabled || sending}
             rows={1}
             className="w-full px-4 py-3 rounded-xl border border-black/10 dark:border-white/10 bg-background text-main placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 text-sm"
@@ -344,114 +293,70 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
   );
 };
 
-// ============ Main Chat View ============
+// ============ Main Messages Pane ============
 
-const ChatView: React.FC<ChatViewProps> = ({ orgId, userId, users }) => {
-  const {
-    channels,
-    currentChannelId,
-    setCurrentChannelId,
-    currentChannel,
-    messages,
-    loadingMessages,
-    hasMoreMessages,
-    loadMoreMessages,
-    sendMessage,
-    sendTyping,
-    unreadByChannel,
-    onlineUserIds,
-    typingUserIds,
-    loading,
-    error,
-  } = useChat({ orgId, userId });
-
-  if (loading && channels.length === 0) {
+const ChatMessagesPane: React.FC<ChatMessagesPaneProps> = ({
+  channel,
+  messages,
+  users,
+  currentUserId,
+  loading,
+  hasMore,
+  onLoadMore,
+  onSend,
+  onTyping,
+  typingUserIds,
+  onlineUserIds,
+}) => {
+  if (!channel) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 size={32} className="animate-spin text-accent" />
-          <span className="text-sm text-muted">Loading chat...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center text-muted bg-background">
         <div className="text-center">
-          <p className="text-red-500 mb-2">Failed to load chat</p>
-          <p className="text-sm text-muted">{error}</p>
+          <MessageSquare size={48} className="mx-auto mb-4 text-muted/50" />
+          <p>Select a channel to start chatting</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-background rounded-2xl border border-black/5 dark:border-white/10">
-      {/* Channel List */}
-      <ChatChannelList
-        channels={channels}
-        currentChannelId={currentChannelId}
-        onSelect={setCurrentChannelId}
-        unreadByChannel={unreadByChannel}
-      />
-
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {currentChannel ? (
-          <>
-            {/* Channel Header */}
-            <div className="h-14 px-4 flex items-center gap-3 border-b border-black/5 dark:border-white/10 bg-surface/50">
-              <Hash size={18} className="text-accent" />
-              <div>
-                <h2 className="text-sm font-semibold text-main">
-                  {currentChannel.name}
-                </h2>
-                {currentChannel.description && (
-                  <p className="text-xs text-muted truncate max-w-md">
-                    {currentChannel.description}
-                  </p>
-                )}
-              </div>
-              {onlineUserIds.length > 0 && (
-                <div className="ml-auto flex items-center gap-1.5 text-xs text-muted">
-                  <span className="w-2 h-2 rounded-full bg-green-500" />
-                  <span>{onlineUserIds.length} online</span>
-                </div>
-              )}
-            </div>
-
-            {/* Messages */}
-            <ChatMessageList
-              messages={messages}
-              users={users}
-              currentUserId={userId}
-              loading={loadingMessages}
-              hasMore={hasMoreMessages}
-              onLoadMore={loadMoreMessages}
-              typingUserIds={typingUserIds}
-              onlineUserIds={onlineUserIds}
-            />
-
-            {/* Composer */}
-            <ChatComposer
-              onSend={sendMessage}
-              onTyping={sendTyping}
-              disabled={!currentChannel}
-            />
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted">
-            <div className="text-center">
-              <MessageSquare size={48} className="mx-auto mb-4 text-muted/50" />
-              <p>Select a channel to start chatting</p>
-            </div>
+    <div className="flex-1 flex flex-col min-w-0 bg-background">
+      {/* Channel Header */}
+      <div className="h-14 px-4 flex items-center gap-3 border-b border-black/5 dark:border-white/10 bg-surface/50 shrink-0">
+        <Hash size={18} className="text-accent" />
+        <div className="flex-1 min-w-0">
+          <h2 className="text-sm font-semibold text-main truncate">
+            {channel.name}
+          </h2>
+          {channel.description && (
+            <p className="text-xs text-muted truncate">
+              {channel.description}
+            </p>
+          )}
+        </div>
+        {onlineUserIds.length > 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-muted shrink-0">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span>{onlineUserIds.length} online</span>
           </div>
         )}
       </div>
+
+      {/* Messages */}
+      <MessageList
+        messages={messages}
+        users={users}
+        currentUserId={currentUserId}
+        loading={loading}
+        hasMore={hasMore}
+        onLoadMore={onLoadMore}
+        typingUserIds={typingUserIds}
+      />
+
+      {/* Composer */}
+      <Composer onSend={onSend} onTyping={onTyping} disabled={!channel} />
     </div>
   );
 };
 
-export default ChatView;
+export default ChatMessagesPane;

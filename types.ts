@@ -137,6 +137,8 @@ export interface ChatChannel {
   description?: string;
   createdBy?: string;
   createdAt: Date;
+  kind: 'channel' | 'dm';
+  dmPeerId?: string;
 }
 
 export interface ChatMessage {
@@ -154,4 +156,13 @@ export interface ChatRead {
   userId: string;
   lastReadAt: Date;
   updatedAt: Date;
+}
+
+export interface ChatDm {
+  channelId: string;
+  orgId: string;
+  userA: string;
+  userB: string;
+  dmKey: string;
+  createdAt: Date;
 }

@@ -1470,11 +1470,22 @@ function App() {
             {sidebarMode === 'chat' ? (
               /* Chat Mode: Show Channels */
               <ChatChannelsPane
-                channels={chatHook.channels}
+                publicChannels={chatHook.publicChannels}
+                directMessages={chatHook.directMessages}
                 currentChannelId={chatHook.currentChannelId}
                 onSelect={chatHook.setCurrentChannelId}
                 unreadByChannel={chatHook.unreadByChannel}
                 loading={chatHook.loading}
+                users={users}
+                currentUserId={user.id}
+                onStartDm={(userId) => {
+                  setSidebarMode('chat');
+                  setViewState({ type: 'chat' });
+                  chatHook.startDm(userId);
+                }}
+                onCreateChannel={(name, slug) =>
+                  chatHook.createPublicChannel(name, slug)
+                }
               />
             ) : (
               /* Project Mode: Show navigation */
@@ -1551,6 +1562,11 @@ function App() {
                 onLoadMore={chatHook.loadMoreMessages}
                 onSend={chatHook.sendMessage}
                 onTyping={chatHook.sendTyping}
+                onStartDm={(userId) => {
+                  setSidebarMode('chat');
+                  setViewState({ type: 'chat' });
+                  chatHook.startDm(userId);
+                }}
                 typingUserIds={chatHook.typingUserIds}
                 onlineUserIds={chatHook.onlineUserIds}
               />

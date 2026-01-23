@@ -14,6 +14,7 @@ interface ChatMessagesPaneProps {
   onLoadMore: () => void;
   onSend: (body: string) => Promise<void>;
   onTyping: (isTyping: boolean) => void;
+  onStartDm: (userId: string) => void;
   typingUserIds: string[];
   onlineUserIds: string[];
 }
@@ -28,6 +29,7 @@ interface MessageListProps {
   hasMore: boolean;
   onLoadMore: () => void;
   typingUserIds: string[];
+  onStartDm: (userId: string) => void;
 }
 
 const MessageList: React.FC<MessageListProps> = ({
@@ -38,6 +40,7 @@ const MessageList: React.FC<MessageListProps> = ({
   hasMore,
   onLoadMore,
   typingUserIds,
+  onStartDm,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -140,24 +143,30 @@ const MessageList: React.FC<MessageListProps> = ({
                   className={`flex gap-3 ${showHeader ? 'mt-4' : 'mt-0.5'}`}
                 >
                   {showHeader ? (
-                    <img
-                      src={resolveAvatarUrl(user?.name || 'User', user?.avatarUrl)}
-                      alt=""
-                      className="w-8 h-8 rounded-full flex-shrink-0"
-                    />
+                    <button
+                      onClick={() => onStartDm(msg.userId)}
+                      className="flex-shrink-0"
+                    >
+                      <img
+                        src={resolveAvatarUrl(user?.name || 'User', user?.avatarUrl)}
+                        alt=""
+                        className="w-8 h-8 rounded-full"
+                      />
+                    </button>
                   ) : (
                     <div className="w-8 flex-shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     {showHeader && (
                       <div className="flex items-baseline gap-2 mb-0.5">
-                        <span
+                        <button
+                          onClick={() => onStartDm(msg.userId)}
                           className={`text-sm font-medium ${
                             isMe ? 'text-accent' : 'text-main'
                           }`}
                         >
                           {user?.name || 'Unknown User'}
-                        </span>
+                        </button>
                         <span className="text-xs text-muted">
                           {formatBeijingTime(msg.createdAt)}
                         </span>
@@ -305,6 +314,7 @@ const ChatMessagesPane: React.FC<ChatMessagesPaneProps> = ({
   onLoadMore,
   onSend,
   onTyping,
+  onStartDm,
   typingUserIds,
   onlineUserIds,
 }) => {
@@ -319,19 +329,38 @@ const ChatMessagesPane: React.FC<ChatMessagesPaneProps> = ({
     );
   }
 
+  const dmPeer =
+    channel.kind === 'dm'
+      ? users.find((u) => u.id === channel.dmPeerId) || null
+      : null;
+
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-background">
       {/* Channel Header */}
       <div className="h-14 px-4 flex items-center gap-3 border-b border-black/5 dark:border-white/10 bg-surface/50 shrink-0">
-        <Hash size={18} className="text-accent" />
+        {channel.kind === 'dm' ? (
+          <img
+            src={resolveAvatarUrl(dmPeer?.name || 'User', dmPeer?.avatarUrl)}
+            alt=""
+            className="w-7 h-7 rounded-full"
+          />
+        ) : (
+          <Hash size={18} className="text-accent" />
+        )}
         <div className="flex-1 min-w-0">
           <h2 className="text-sm font-semibold text-main truncate">
-            {channel.name}
+            {channel.kind === 'dm'
+              ? dmPeer?.name || 'Direct message'
+              : channel.name}
           </h2>
-          {channel.description && (
-            <p className="text-xs text-muted truncate">
-              {channel.description}
-            </p>
+          {channel.kind === 'dm' ? (
+            <p className="text-xs text-muted truncate">Direct message</p>
+          ) : (
+            channel.description && (
+              <p className="text-xs text-muted truncate">
+                {channel.description}
+              </p>
+            )
           )}
         </div>
         {onlineUserIds.length > 0 && (
@@ -351,6 +380,7 @@ const ChatMessagesPane: React.FC<ChatMessagesPaneProps> = ({
         hasMore={hasMore}
         onLoadMore={onLoadMore}
         typingUserIds={typingUserIds}
+        onStartDm={onStartDm}
       />
 
       {/* Composer */}

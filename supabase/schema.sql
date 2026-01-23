@@ -213,6 +213,17 @@ CREATE TABLE chat_channels (
   UNIQUE(org_id, slug)
 );
 
+-- ============ Chat DMs 私聊映射表 ============
+CREATE TABLE chat_dms (
+  channel_id TEXT PRIMARY KEY REFERENCES chat_channels(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  dm_key TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(org_id, dm_key)
+);
+
 -- ============ Chat Messages 聊天消息表 ============
 CREATE TABLE chat_messages (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -235,18 +246,34 @@ CREATE TABLE chat_reads (
 
 -- ============ Chat 索引 ============
 CREATE INDEX idx_chat_channels_org ON chat_channels(org_id);
+CREATE INDEX idx_chat_dms_org ON chat_dms(org_id);
+CREATE INDEX idx_chat_dms_user_a ON chat_dms(user_a);
+CREATE INDEX idx_chat_dms_user_b ON chat_dms(user_b);
 CREATE INDEX idx_chat_messages_channel ON chat_messages(channel_id, created_at DESC);
 CREATE INDEX idx_chat_messages_org ON chat_messages(org_id);
 CREATE INDEX idx_chat_reads_user ON chat_reads(user_id);
 
 -- ============ Chat RLS ============
 ALTER TABLE chat_channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_dms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_reads ENABLE ROW LEVEL SECURITY;
 
--- Chat Channels: 组织成员可查看/创建公共频道
+-- Chat Channels: 公共频道组织成员可见；私聊仅参与人可见
 CREATE POLICY "chat_channels_select" ON chat_channels FOR SELECT TO authenticated
-  USING (org_id IN (SELECT get_user_org_ids(auth.uid())));
+  USING (
+    (
+      org_id IN (SELECT get_user_org_ids(auth.uid()))
+      AND NOT EXISTS (
+        SELECT 1 FROM chat_dms WHERE chat_dms.channel_id = chat_channels.id
+      )
+    )
+    OR EXISTS (
+      SELECT 1 FROM chat_dms
+      WHERE chat_dms.channel_id = chat_channels.id
+        AND auth.uid() IN (chat_dms.user_a, chat_dms.user_b)
+    )
+  );
 CREATE POLICY "chat_channels_insert" ON chat_channels FOR INSERT TO authenticated
   WITH CHECK (org_id IN (SELECT get_user_org_ids(auth.uid())));
 CREATE POLICY "chat_channels_update" ON chat_channels FOR UPDATE TO authenticated
@@ -254,9 +281,32 @@ CREATE POLICY "chat_channels_update" ON chat_channels FOR UPDATE TO authenticate
 CREATE POLICY "chat_channels_delete" ON chat_channels FOR DELETE TO authenticated
   USING (org_id IN (SELECT get_user_org_ids(auth.uid())) AND created_by = auth.uid());
 
+-- Chat DMs: 仅参与者可读写
+CREATE POLICY "chat_dms_select" ON chat_dms FOR SELECT TO authenticated
+  USING (auth.uid() IN (user_a, user_b));
+CREATE POLICY "chat_dms_insert" ON chat_dms FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() IN (user_a, user_b)
+    AND org_id IN (SELECT get_user_org_ids(auth.uid()))
+  );
+CREATE POLICY "chat_dms_delete" ON chat_dms FOR DELETE TO authenticated
+  USING (auth.uid() IN (user_a, user_b));
+
 -- Chat Messages: 组织成员可查看；仅本人可插入/更新/删除自己的消息
 CREATE POLICY "chat_messages_select" ON chat_messages FOR SELECT TO authenticated
-  USING (org_id IN (SELECT get_user_org_ids(auth.uid())));
+  USING (
+    (
+      org_id IN (SELECT get_user_org_ids(auth.uid()))
+      AND NOT EXISTS (
+        SELECT 1 FROM chat_dms WHERE chat_dms.channel_id = chat_messages.channel_id
+      )
+    )
+    OR EXISTS (
+      SELECT 1 FROM chat_dms
+      WHERE chat_dms.channel_id = chat_messages.channel_id
+        AND auth.uid() IN (chat_dms.user_a, chat_dms.user_b)
+    )
+  );
 CREATE POLICY "chat_messages_insert" ON chat_messages FOR INSERT TO authenticated
   WITH CHECK (
     user_id = auth.uid()
@@ -270,14 +320,60 @@ CREATE POLICY "chat_messages_delete" ON chat_messages FOR DELETE TO authenticate
 
 -- Chat Reads: 仅本人可读写自己的已读记录
 CREATE POLICY "chat_reads_select" ON chat_reads FOR SELECT TO authenticated
-  USING (user_id = auth.uid());
+  USING (
+    user_id = auth.uid()
+    AND (
+      (
+        channel_id IN (
+          SELECT id FROM chat_channels
+          WHERE org_id IN (SELECT get_user_org_ids(auth.uid()))
+            AND NOT EXISTS (
+              SELECT 1 FROM chat_dms WHERE chat_dms.channel_id = chat_channels.id
+            )
+        )
+      )
+      OR channel_id IN (
+        SELECT channel_id FROM chat_dms
+        WHERE auth.uid() IN (chat_dms.user_a, chat_dms.user_b)
+      )
+    )
+  );
 CREATE POLICY "chat_reads_insert" ON chat_reads FOR INSERT TO authenticated
   WITH CHECK (
     user_id = auth.uid()
-    AND channel_id IN (SELECT id FROM chat_channels WHERE org_id IN (SELECT get_user_org_ids(auth.uid())))
+    AND (
+      channel_id IN (
+        SELECT id FROM chat_channels
+        WHERE org_id IN (SELECT get_user_org_ids(auth.uid()))
+          AND NOT EXISTS (
+            SELECT 1 FROM chat_dms WHERE chat_dms.channel_id = chat_channels.id
+          )
+      )
+      OR channel_id IN (
+        SELECT channel_id FROM chat_dms
+        WHERE auth.uid() IN (chat_dms.user_a, chat_dms.user_b)
+      )
+    )
   );
 CREATE POLICY "chat_reads_update" ON chat_reads FOR UPDATE TO authenticated
-  USING (user_id = auth.uid());
+  USING (
+    user_id = auth.uid()
+    AND (
+      (
+        channel_id IN (
+          SELECT id FROM chat_channels
+          WHERE org_id IN (SELECT get_user_org_ids(auth.uid()))
+            AND NOT EXISTS (
+              SELECT 1 FROM chat_dms WHERE chat_dms.channel_id = chat_channels.id
+            )
+        )
+      )
+      OR channel_id IN (
+        SELECT channel_id FROM chat_dms
+        WHERE auth.uid() IN (chat_dms.user_a, chat_dms.user_b)
+      )
+    )
+  );
 
 -- ============ 实时订阅 ============
 ALTER PUBLICATION supabase_realtime ADD TABLE issues;
@@ -286,4 +382,5 @@ ALTER PUBLICATION supabase_realtime ADD TABLE cycles;
 ALTER PUBLICATION supabase_realtime ADD TABLE users;
 ALTER PUBLICATION supabase_realtime ADD TABLE teams;
 ALTER PUBLICATION supabase_realtime ADD TABLE chat_channels;
+ALTER PUBLICATION supabase_realtime ADD TABLE chat_dms;
 ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages;

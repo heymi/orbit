@@ -10,6 +10,8 @@ interface UseChatOptions {
 interface UseChatReturn {
   // Channels
   channels: ChatChannel[];
+  publicChannels: ChatChannel[];
+  directMessages: ChatChannel[];
   currentChannelId: string | null;
   setCurrentChannelId: (id: string | null) => void;
   currentChannel: ChatChannel | null;
@@ -23,6 +25,8 @@ interface UseChatReturn {
   // Actions
   sendMessage: (body: string) => Promise<void>;
   sendTyping: (isTyping: boolean) => void;
+  startDm: (peerUserId: string) => Promise<void>;
+  createPublicChannel: (name: string, slug: string, description?: string) => Promise<void>;
 
   // Unread
   unreadByChannel: Record<string, number>;
@@ -71,6 +75,8 @@ export const useChat = ({ orgId, userId }: UseChatOptions): UseChatReturn => {
   // Derived
   const currentChannel = channels.find((c) => c.id === currentChannelId) || null;
   const totalUnread = Object.values(unreadByChannel).reduce((sum, n) => sum + n, 0);
+  const publicChannels = channels.filter((channel) => channel.kind === 'channel');
+  const directMessages = channels.filter((channel) => channel.kind === 'dm');
 
   // ============ Load Channels ============
   const loadChannels = useCallback(async () => {
@@ -269,6 +275,38 @@ export const useChat = ({ orgId, userId }: UseChatOptions): UseChatReturn => {
     [userId]
   );
 
+  const startDm = useCallback(
+    async (peerUserId: string) => {
+      if (!orgId || !userId || !peerUserId || peerUserId === userId) return;
+      const channel = await chatService.getOrCreateDmChannel(orgId, userId, peerUserId);
+      setChannels((prev) => {
+        if (prev.some((c) => c.id === channel.id)) return prev;
+        return [...prev, channel];
+      });
+      setCurrentChannelId(channel.id);
+      await loadChannels();
+    },
+    [orgId, userId, loadChannels]
+  );
+
+  const createPublicChannel = useCallback(
+    async (name: string, slug: string, description?: string) => {
+      if (!orgId || !userId || !name.trim() || !slug.trim()) return;
+      const channel = await chatService.createChannel(
+        orgId,
+        { name: name.trim(), slug: slug.trim(), description },
+        userId
+      );
+      setChannels((prev) => {
+        if (prev.some((c) => c.id === channel.id)) return prev;
+        return [...prev, channel];
+      });
+      setCurrentChannelId(channel.id);
+      await loadChannels();
+    },
+    [orgId, userId, loadChannels]
+  );
+
   // ============ Refresh ============
   const refreshChannels = useCallback(async () => {
     await loadChannels();
@@ -277,6 +315,8 @@ export const useChat = ({ orgId, userId }: UseChatOptions): UseChatReturn => {
 
   return {
     channels,
+    publicChannels,
+    directMessages,
     currentChannelId,
     setCurrentChannelId,
     currentChannel,
@@ -286,6 +326,8 @@ export const useChat = ({ orgId, userId }: UseChatOptions): UseChatReturn => {
     loadMoreMessages,
     sendMessage,
     sendTyping,
+    startDm,
+    createPublicChannel,
     unreadByChannel,
     totalUnread,
     onlineUserIds,

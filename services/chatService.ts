@@ -12,6 +12,16 @@ interface DbChatChannel {
   description: string | null;
   created_by: string | null;
   created_at: string;
+  chat_dms?: DbChatDm | DbChatDm[] | null;
+}
+
+interface DbChatDm {
+  channel_id: string;
+  org_id: string;
+  user_a: string;
+  user_b: string;
+  dm_key: string;
+  created_at: string;
 }
 
 interface DbChatMessage {
@@ -33,15 +43,35 @@ interface DbChatRead {
 
 // ============ Converters ============
 
-const toChannel = (row: DbChatChannel): ChatChannel => ({
-  id: row.id,
-  orgId: row.org_id,
-  name: row.name,
-  slug: row.slug,
-  description: row.description || undefined,
-  createdBy: row.created_by || undefined,
-  createdAt: new Date(row.created_at),
-});
+const normalizeDm = (dm?: DbChatDm | DbChatDm[] | null): DbChatDm | null => {
+  if (!dm) return null;
+  if (Array.isArray(dm)) return dm[0] || null;
+  return dm;
+};
+
+const toChannel = (row: DbChatChannel, currentUserId?: string): ChatChannel => {
+  const dm = normalizeDm(row.chat_dms);
+  const isDm = Boolean(dm);
+  const dmPeerId = dm
+    ? dm.user_a === currentUserId
+      ? dm.user_b
+      : dm.user_b === currentUserId
+      ? dm.user_a
+      : undefined
+    : undefined;
+
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description || undefined,
+    createdBy: row.created_by || undefined,
+    createdAt: new Date(row.created_at),
+    kind: isDm ? 'dm' : 'channel',
+    dmPeerId,
+  };
+};
 
 const toMessage = (row: DbChatMessage): ChatMessage => ({
   id: row.id,
@@ -62,14 +92,17 @@ const toRead = (row: DbChatRead): ChatRead => ({
 
 // ============ Channel Operations ============
 
-export const fetchChannels = async (orgId: string): Promise<ChatChannel[]> => {
+export const fetchChannels = async (
+  orgId: string,
+  currentUserId?: string
+): Promise<ChatChannel[]> => {
   const { data, error } = await supabase
     .from('chat_channels')
-    .select('*')
+    .select('*, chat_dms(user_a, user_b, dm_key, created_at)')
     .eq('org_id', orgId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data || []).map(toChannel);
+  return (data || []).map((row) => toChannel(row as DbChatChannel, currentUserId));
 };
 
 export const createChannel = async (
@@ -96,8 +129,9 @@ export const ensureDefaultChannels = async (
   orgId: string,
   userId: string
 ): Promise<ChatChannel[]> => {
-  const existing = await fetchChannels(orgId);
-  if (existing.length > 0) return existing;
+  const existing = await fetchChannels(orgId, userId);
+  const publicChannels = existing.filter((channel) => channel.kind === 'channel');
+  if (publicChannels.length > 0) return existing;
 
   const defaults = [
     { name: 'General', slug: 'general', description: '团队公共讨论' },
@@ -117,7 +151,91 @@ export const ensureDefaultChannels = async (
     }
   }
 
-  return channels.length > 0 ? channels : fetchChannels(orgId);
+  return channels.length > 0 ? channels : fetchChannels(orgId, userId);
+};
+
+const buildDmKey = (userA: string, userB: string): string => {
+  const [first, second] = [userA, userB].sort();
+  return `dm:${first}:${second}`;
+};
+
+const fetchChannelById = async (
+  channelId: string,
+  currentUserId?: string
+): Promise<ChatChannel> => {
+  const { data, error } = await supabase
+    .from('chat_channels')
+    .select('*, chat_dms(user_a, user_b, dm_key, created_at)')
+    .eq('id', channelId)
+    .single();
+  if (error) throw error;
+  return toChannel(data as DbChatChannel, currentUserId);
+};
+
+export const getOrCreateDmChannel = async (
+  orgId: string,
+  userId: string,
+  peerId: string
+): Promise<ChatChannel> => {
+  const dmKey = buildDmKey(userId, peerId);
+  const { data: existingDm, error: existingError } = await supabase
+    .from('chat_dms')
+    .select('channel_id, user_a, user_b, dm_key, created_at')
+    .eq('org_id', orgId)
+    .eq('dm_key', dmKey)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existingDm?.channel_id) {
+    return fetchChannelById(existingDm.channel_id, userId);
+  }
+
+  const { data: channelRow, error: channelError } = await supabase
+    .from('chat_channels')
+    .insert({
+      org_id: orgId,
+      name: 'Direct message',
+      slug: dmKey,
+      description: null,
+      created_by: userId,
+    })
+    .select('*, chat_dms(user_a, user_b, dm_key, created_at)')
+    .single();
+
+  if (channelError) throw channelError;
+
+  const channelId = channelRow?.id as string;
+  const { error: dmError } = await supabase.from('chat_dms').insert({
+    channel_id: channelId,
+    org_id: orgId,
+    user_a: userId,
+    user_b: peerId,
+    dm_key: dmKey,
+  });
+
+  if (!dmError) {
+    return toChannel(channelRow as DbChatChannel, userId);
+  }
+
+  if (dmError.code === '23505') {
+    const { data: dmRow, error: retryError } = await supabase
+      .from('chat_dms')
+      .select('channel_id')
+      .eq('org_id', orgId)
+      .eq('dm_key', dmKey)
+      .maybeSingle();
+    if (retryError) throw retryError;
+    if (dmRow?.channel_id) {
+      return fetchChannelById(dmRow.channel_id, userId);
+    }
+  }
+
+  await supabase
+    .from('chat_channels')
+    .delete()
+    .eq('id', channelId)
+    .eq('created_by', userId);
+  throw dmError;
 };
 
 // ============ Message Operations ============

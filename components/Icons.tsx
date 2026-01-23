@@ -68,7 +68,11 @@ import {
   Flag,
   BarChart3,
   AlertTriangle,
-  LogOut
+  LogOut,
+  MessageSquare,
+  Hash,
+  Send,
+  Loader2
 } from 'lucide-react';
 import { Priority, Status } from '../types';
 
@@ -134,5 +138,6 @@ export {
   Eye, Beaker, GitMerge, Copy, Terminal, GitBranch, Check,
   Users, Settings, Mail, Edit3, Rocket, ChevronDown, ChevronUp,
   Briefcase, Folder, Globe, Box, Target, Zap, Cpu, Smartphone, Layout, Flag,
-  AlertCircle, XCircle, BarChart3, Clock, AlertTriangle, LogOut
+  AlertCircle, XCircle, BarChart3, Clock, AlertTriangle, LogOut,
+  MessageSquare, Hash, Send, Loader2
 };

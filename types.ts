@@ -111,11 +111,12 @@ export interface Issue {
 }
 
 export interface ViewState {
-  type: 'all' | 'my' | 'team' | 'cycle' | 'cycles' | 'members' | 'project' | 'pipeline' | 'bug'; 
+  type: 'all' | 'my' | 'team' | 'cycle' | 'cycles' | 'members' | 'project' | 'pipeline' | 'bug' | 'chat'; 
   teamId?: string;
   cycleId?: string;
   projectId?: string;
   pipelineStage?: 'triage' | 'building' | 'qa' | 'live';
+  channelId?: string;
 }
 
 export type SortOption = 'priority' | 'status' | 'created' | 'manual';
@@ -124,4 +125,33 @@ export type GroupOption = 'status' | 'priority' | 'project' | 'none';
 // New type for the Draft Preview in Note Mode
 export interface DraftIssue extends Omit<Issue, 'id' | 'identifier' | 'createdAt' | 'updatedAt' | 'activities'> {
   tempId: string; // For local list management
+}
+
+// ============ Chat Types ============
+
+export interface ChatChannel {
+  id: string;
+  orgId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  createdBy?: string;
+  createdAt: Date;
+}
+
+export interface ChatMessage {
+  id: string;
+  orgId: string;
+  channelId: string;
+  userId: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChatRead {
+  channelId: string;
+  userId: string;
+  lastReadAt: Date;
+  updatedAt: Date;
 }

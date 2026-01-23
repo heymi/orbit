@@ -201,9 +201,89 @@ CREATE POLICY "activities_all" ON activities FOR ALL TO authenticated
   USING (issue_id IN (SELECT id FROM issues WHERE org_id IN (SELECT get_user_org_ids(auth.uid()))))
   WITH CHECK (issue_id IN (SELECT id FROM issues WHERE org_id IN (SELECT get_user_org_ids(auth.uid()))));
 
+-- ============ Chat Channels 聊天频道表 ============
+CREATE TABLE chat_channels (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(org_id, slug)
+);
+
+-- ============ Chat Messages 聊天消息表 ============
+CREATE TABLE chat_messages (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL REFERENCES chat_channels(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============ Chat Reads 聊天已读记录表 ============
+CREATE TABLE chat_reads (
+  channel_id TEXT NOT NULL REFERENCES chat_channels(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (channel_id, user_id)
+);
+
+-- ============ Chat 索引 ============
+CREATE INDEX idx_chat_channels_org ON chat_channels(org_id);
+CREATE INDEX idx_chat_messages_channel ON chat_messages(channel_id, created_at DESC);
+CREATE INDEX idx_chat_messages_org ON chat_messages(org_id);
+CREATE INDEX idx_chat_reads_user ON chat_reads(user_id);
+
+-- ============ Chat RLS ============
+ALTER TABLE chat_channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_reads ENABLE ROW LEVEL SECURITY;
+
+-- Chat Channels: 组织成员可查看/创建公共频道
+CREATE POLICY "chat_channels_select" ON chat_channels FOR SELECT TO authenticated
+  USING (org_id IN (SELECT get_user_org_ids(auth.uid())));
+CREATE POLICY "chat_channels_insert" ON chat_channels FOR INSERT TO authenticated
+  WITH CHECK (org_id IN (SELECT get_user_org_ids(auth.uid())));
+CREATE POLICY "chat_channels_update" ON chat_channels FOR UPDATE TO authenticated
+  USING (org_id IN (SELECT get_user_org_ids(auth.uid())));
+CREATE POLICY "chat_channels_delete" ON chat_channels FOR DELETE TO authenticated
+  USING (org_id IN (SELECT get_user_org_ids(auth.uid())) AND created_by = auth.uid());
+
+-- Chat Messages: 组织成员可查看；仅本人可插入/更新/删除自己的消息
+CREATE POLICY "chat_messages_select" ON chat_messages FOR SELECT TO authenticated
+  USING (org_id IN (SELECT get_user_org_ids(auth.uid())));
+CREATE POLICY "chat_messages_insert" ON chat_messages FOR INSERT TO authenticated
+  WITH CHECK (
+    user_id = auth.uid()
+    AND org_id IN (SELECT get_user_org_ids(auth.uid()))
+    AND channel_id IN (SELECT id FROM chat_channels WHERE org_id IN (SELECT get_user_org_ids(auth.uid())))
+  );
+CREATE POLICY "chat_messages_update" ON chat_messages FOR UPDATE TO authenticated
+  USING (user_id = auth.uid());
+CREATE POLICY "chat_messages_delete" ON chat_messages FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
+
+-- Chat Reads: 仅本人可读写自己的已读记录
+CREATE POLICY "chat_reads_select" ON chat_reads FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+CREATE POLICY "chat_reads_insert" ON chat_reads FOR INSERT TO authenticated
+  WITH CHECK (
+    user_id = auth.uid()
+    AND channel_id IN (SELECT id FROM chat_channels WHERE org_id IN (SELECT get_user_org_ids(auth.uid())))
+  );
+CREATE POLICY "chat_reads_update" ON chat_reads FOR UPDATE TO authenticated
+  USING (user_id = auth.uid());
+
 -- ============ 实时订阅 ============
 ALTER PUBLICATION supabase_realtime ADD TABLE issues;
 ALTER PUBLICATION supabase_realtime ADD TABLE projects;
 ALTER PUBLICATION supabase_realtime ADD TABLE cycles;
 ALTER PUBLICATION supabase_realtime ADD TABLE users;
 ALTER PUBLICATION supabase_realtime ADD TABLE teams;
+ALTER PUBLICATION supabase_realtime ADD TABLE chat_channels;
+ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages;

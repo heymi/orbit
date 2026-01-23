@@ -5,8 +5,10 @@ import {
   PriorityIcon, StatusIcon, ArrowDownWideNarrow, LayoutList, TeamIcon, 
   Sun, Moon, Monitor, MoreVertical, CalendarRange, Repeat, Users, Rocket,
   Briefcase, ProjectIcon, Settings, Zap, GitMerge, CheckCircle2, AlertCircle, XCircle,
-  LayoutGrid, List, BarChart3, Clock, AlertTriangle, Check, LogOut, ChevronDown, ChevronRight, Edit3
+  LayoutGrid, List, BarChart3, Clock, AlertTriangle, Check, LogOut, ChevronDown, ChevronRight, Edit3,
+  MessageSquare
 } from './components/Icons';
+import ChatView from './components/ChatView';
 import CreateIssueModal from './components/CreateIssueModal';
 import CreateProjectModal from './components/CreateProjectModal'; 
 import CreateCycleModal from './components/CreateCycleModal';
@@ -33,7 +35,7 @@ import { formatBeijingDate, formatBeijingDateTime, formatBeijingTime, getBeijing
 const DEFAULT_VIEW_STATE: ViewState = { type: 'my' };
 const DEFAULT_PIPELINE_STAGE: NonNullable<ViewState['pipelineStage']> = 'building';
 const PIPELINE_STAGES: NonNullable<ViewState['pipelineStage']>[] = ['triage', 'building', 'qa', 'live'];
-const VIEW_TYPES: ViewState['type'][] = ['all', 'my', 'team', 'cycle', 'cycles', 'members', 'project', 'pipeline', 'bug'];
+const VIEW_TYPES: ViewState['type'][] = ['all', 'my', 'team', 'cycle', 'cycles', 'members', 'project', 'pipeline', 'bug', 'chat'];
 
 const normalizeViewState = (value: any): ViewState => {
   if (!value || typeof value !== 'object') return DEFAULT_VIEW_STATE;
@@ -48,6 +50,7 @@ const normalizeViewState = (value: any): ViewState => {
   if (type === 'team') return value.teamId ? { type, teamId: value.teamId } : DEFAULT_VIEW_STATE;
   if (type === 'cycle') return value.cycleId ? { type, cycleId: value.cycleId } : DEFAULT_VIEW_STATE;
   if (type === 'project') return value.projectId ? { type, projectId: value.projectId } : DEFAULT_VIEW_STATE;
+  if (type === 'chat') return value.channelId ? { type, channelId: value.channelId } : { type };
   return { type };
 };
 
@@ -1460,6 +1463,9 @@ function App() {
                 {projects.map(p => (
                     <SidebarItem key={p.id} icon={<ProjectIcon icon={p.icon} />} label={p.name} isActive={viewState.type === 'project' && viewState.projectId === p.id} onClick={() => setViewState({ type: 'project', projectId: p.id })} count={issues.filter(i => i.projectId === p.id).length} />
                 ))}
+                <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">沟通</div>
+                <SidebarItem icon={<MessageSquare size={18} />} label="团队聊天" isActive={viewState.type === 'chat'} onClick={() => setViewState({ type: 'chat' })} />
+
                 <div className="text-[11px] font-bold text-muted uppercase tracking-wider px-3 mb-2 mt-5">管理</div>
                 <SidebarItem icon={<Users size={18} />} label="团队成员" isActive={viewState.type === 'members'} onClick={() => setViewState({ type: 'members' })} />
                 {isAdmin && (
@@ -1486,6 +1492,8 @@ function App() {
       <main className="flex-1 flex flex-col h-full md:ml-[290px] mr-4 my-4 rounded-3xl bg-transparent overflow-hidden relative">
           {viewState.type === 'members' ? (
               <TeamMembersView users={users} currentUser={currentUserRecord} onAddUser={handleUserInvite} onUpdateUser={handleUserUpdate} onDeleteUser={handleUserRemove} />
+          ) : viewState.type === 'chat' ? (
+              <ChatView orgId={currentOrg?.id || ''} userId={user.id} users={users} />
           ) : (
 
             <div className="flex-1 flex overflow-hidden">

@@ -259,14 +259,18 @@ export const createOrganization = async (name: string, slug: string): Promise<Or
   if (!user) throw new Error('Not authenticated');
   console.log('User ID:', user.id);
 
-  // 创建组织
+  // 预生成组织 ID，避免 INSERT 后立即 SELECT（SELECT policy 依赖 org_members 存在）
+  const orgId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  // 创建组织（不返回数据，避免触发 SELECT policy）
   console.log('Step 2: Creating organization...');
-  const { data: org, error: orgError } = await withTimeout(
+  const { error: orgError } = await withTimeout(
     supabase
       .from('organizations')
-      .insert({ name, slug: finalSlug })
-      .select()
-      .single(),
+      .insert({ id: orgId, name, slug: finalSlug }),
     '创建组织'
   );
   
@@ -274,14 +278,14 @@ export const createOrganization = async (name: string, slug: string): Promise<Or
     console.error('Org creation error:', orgError);
     throw orgError;
   }
-  console.log('Organization created:', org);
+  console.log('Organization created with ID:', orgId);
 
-  // 将当前用户设为 owner
+  // 将当前用户设为 owner（此后 SELECT policy 会放行）
   console.log('Step 3: Adding user as owner...');
   const { error: memberError } = await withTimeout(
     supabase
       .from('org_members')
-      .insert({ org_id: org.id, user_id: user.id, role: 'owner' }),
+      .insert({ org_id: orgId, user_id: user.id, role: 'owner' }),
     '添加组织成员'
   );
   
@@ -295,8 +299,8 @@ export const createOrganization = async (name: string, slug: string): Promise<Or
   console.log('Step 4: Creating default teams...');
   const { error: teamsError } = await withTimeout(
     supabase.from('teams').insert([
-      { org_id: org.id, id: `${org.id}_inbox`, name: '业务收件箱', icon: 'Inbox' },
-      { org_id: org.id, id: `${org.id}_eng`, name: '研发交付', icon: 'Zap' },
+      { org_id: orgId, id: `${orgId}_inbox`, name: '业务收件箱', icon: 'Inbox' },
+      { org_id: orgId, id: `${orgId}_eng`, name: '研发交付', icon: 'Zap' },
     ]),
     '创建默认团队'
   );
@@ -306,6 +310,27 @@ export const createOrganization = async (name: string, slug: string): Promise<Or
     // 不抛出错误，团队创建失败不影响组织创建
   }
   console.log('Teams created');
+
+  // 现在可以安全地查询刚创建的组织（已有 org_members 关系）
+  const { data: org, error: fetchError } = await withTimeout(
+    supabase
+      .from('organizations')
+      .select('*')
+      .eq('id', orgId)
+      .single(),
+    '获取组织信息'
+  );
+
+  if (fetchError || !org) {
+    console.error('Failed to fetch created org:', fetchError);
+    // 组织已创建成功，返回一个基本对象
+    return {
+      id: orgId,
+      name,
+      slug: finalSlug,
+      createdAt: new Date(),
+    };
+  }
 
   return toOrganization(org);
 };
